@@ -1,4 +1,4 @@
-# AppHasani
+# AppGestoPagos
 
 Servicio Spring Boot para la integración con GestoPago, consulta de personas y administración local del catálogo de productos.
 
