@@ -86,6 +86,11 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
             catalogRepository.deleteAll();
             catalogRepository.saveAll(productos);
 
+            // Sincronizar inmediatamente en Redis para mantener los datos al día
+            ResponseDTO<List<GestoPagoCatalogProduct>> cacheDto =
+                    ResponseDTO.success(0, "Catálogo sincronizado desde GestoPago", productos);
+            guardarEnCache(cacheDto);
+
             log.info("Catálogo GestoPago actualizado correctamente en PostgreSQL y Redis. Total: {}", productos.size());
         } catch (IllegalStateException ex) {
             log.error("Error de validación del catálogo externo: {}", ex.getMessage(), ex);
@@ -101,23 +106,29 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
 
     @Override
     public ResponseDTO<List<GestoPagoCatalogProduct>> consultarCatalogo() {
-        Object cachedValue = redisTemplate.opsForValue().get(REDIS_KEY);
-        if (cachedValue instanceof ResponseDTO<?> cachedResponse
-                && cachedResponse.getData() instanceof List<?> data
-                && !data.isEmpty()) {
-            log.info("Cache hit de Redis para la clave {}", REDIS_KEY);
-            @SuppressWarnings("unchecked")
-            ResponseDTO<List<GestoPagoCatalogProduct>> typedResponse =
-                    (ResponseDTO<List<GestoPagoCatalogProduct>>) (ResponseDTO<?>) cachedResponse;
-            return typedResponse;
+        // 1. NIVEL 1: Consultar Redis (Caché en memoria)
+        ResponseDTO<List<GestoPagoCatalogProduct>> cached = consultarCacheRedis();
+        if (cached != null) {
+            log.info("Flujo [1/3] Cache HIT en Redis (clave: {}). Retornando {} productos desde memoria.",
+                    REDIS_KEY, cached.getData().size());
+            return cached;
         }
+        log.info("Flujo [1/3] Cache MISS en Redis (clave: {}). Continuando con Nivel 2: PostgreSQL...", REDIS_KEY);
 
-        log.info("Cache miss de Redis para la clave {}; consultando PostgreSQL o GestoPago", REDIS_KEY);
-        List<GestoPagoCatalogProduct> cache = catalogRepository.findAll();
-        if (!cache.isEmpty()) {
-            return guardarEnCache(ResponseDTO.success(0, "Catálogo cargado desde PostgreSQL", cache));
+        // 2. NIVEL 2: Consultar PostgreSQL (Persistencia local)
+        log.info("Flujo [2/3] Consultando base de datos PostgreSQL...");
+        List<GestoPagoCatalogProduct> localProducts = catalogRepository.findAll();
+        if (!localProducts.isEmpty()) {
+            log.info("Flujo [2/3] Encontrados {} productos en PostgreSQL. Repoblando Redis y retornando.",
+                    localProducts.size());
+            ResponseDTO<List<GestoPagoCatalogProduct>> response =
+                    ResponseDTO.success(0, "Catálogo cargado desde PostgreSQL", localProducts);
+            return guardarEnCache(response);
         }
+        log.info("Flujo [2/3] PostgreSQL vacío. Continuando con Nivel 3: API GestoPago...");
 
+        // 3. NIVEL 3: Consultar API externa de GestoPago
+        log.info("Flujo [3/3] Consultando API externa de GestoPago...");
         try {
             String token = obtenerTokenActual();
             GestoPagoProductXmlResponse response = productsClient.getProductListXml(
@@ -127,27 +138,65 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
             );
             List<GestoPagoProductXmlItem> items = response != null ? response.getItems() : List.of();
             if (items.isEmpty()) {
+                log.warn("Flujo [3/3] La API de GestoPago no retornó productos.");
                 return ResponseDTO.failure(1, "Sin catálogo disponible en GestoPago");
             }
             List<GestoPagoCatalogProduct> productos = mapXmlToEntity(items);
             catalogRepository.saveAll(productos);
-            return guardarEnCache(ResponseDTO.success(0, "Catálogo cargado desde GestoPago", productos));
+
+            ResponseDTO<List<GestoPagoCatalogProduct>> successResponse =
+                    ResponseDTO.success(0, "Catálogo cargado desde GestoPago", productos);
+            log.info("Flujo [3/3] Éxito en API GestoPago. {} productos persistidos en PostgreSQL y guardados en Redis.",
+                    productos.size());
+            return guardarEnCache(successResponse);
         } catch (RetryableException ex) {
-            log.error("Timeout externo al consultar catálogo. Se usa fallback local.", ex);
-            List<GestoPagoCatalogProduct> local = catalogRepository.findAll();
-            return guardarEnCache(ResponseDTO.success(0, "Catálogo cargado desde caché local por fallo en servicio externo", local));
+            log.error("Flujo [3/3] Timeout al consultar API de GestoPago. Activando fallback a base local...", ex);
+            return responderConFallbackLocal("Catálogo cargado desde caché local por fallo en servicio externo");
         } catch (FeignException ex) {
-            log.error("Fallo externo al consultar catálogo. Se usa fallback local.", ex);
-            List<GestoPagoCatalogProduct> local = catalogRepository.findAll();
-            return guardarEnCache(ResponseDTO.success(0, "Catálogo cargado desde caché local por fallo en servicio externo", local));
+            log.error("Flujo [3/3] Error HTTP {} al consultar API de GestoPago. Activando fallback a base local...",
+                    ex.status(), ex);
+            return responderConFallbackLocal("Catálogo cargado desde caché local por fallo en servicio externo");
         }
+    }
+
+    private ResponseDTO<List<GestoPagoCatalogProduct>> consultarCacheRedis() {
+        try {
+            Object cachedValue = redisTemplate.opsForValue().get(REDIS_KEY);
+            if (cachedValue instanceof ResponseDTO<?> cachedResponse
+                    && cachedResponse.getData() instanceof List<?> data
+                    && !data.isEmpty()) {
+                @SuppressWarnings("unchecked")
+                ResponseDTO<List<GestoPagoCatalogProduct>> typedResponse =
+                        (ResponseDTO<List<GestoPagoCatalogProduct>>) (ResponseDTO<?>) cachedResponse;
+                return typedResponse;
+            }
+        } catch (Exception ex) {
+            log.warn("Flujo [1/3] Error de comunicación con Redis: '{}'. Se continúa resilentemente con PostgreSQL.",
+                    ex.getMessage());
+        }
+        return null;
+    }
+
+    private ResponseDTO<List<GestoPagoCatalogProduct>> responderConFallbackLocal(String mensaje) {
+        List<GestoPagoCatalogProduct> local = catalogRepository.findAll();
+        if (local.isEmpty()) {
+            log.error("Fallback fallido: no hay información disponible en la base de datos local.");
+            return ResponseDTO.failure(1, "No hay información disponible localmente ni en servicio externo");
+        }
+        ResponseDTO<List<GestoPagoCatalogProduct>> fallbackResponse = ResponseDTO.success(0, mensaje, local);
+        return guardarEnCache(fallbackResponse);
     }
 
     private ResponseDTO<List<GestoPagoCatalogProduct>> guardarEnCache(
             ResponseDTO<List<GestoPagoCatalogProduct>> response) {
-        if (response.getData() != null && !response.getData().isEmpty()) {
-            redisTemplate.opsForValue().set(REDIS_KEY, response, Duration.ofMinutes(10));
-            log.info("Catálogo guardado en Redis con la clave {}", REDIS_KEY);
+        if (response != null && response.getData() != null && !response.getData().isEmpty()) {
+            try {
+                redisTemplate.opsForValue().set(REDIS_KEY, response, Duration.ofMinutes(10));
+                log.info("Catálogo guardado en Redis con la clave {} (TTL: 10m)", REDIS_KEY);
+            } catch (Exception ex) {
+                log.warn("No fue posible guardar en Redis: '{}'. La respuesta continuará normalmente.",
+                        ex.getMessage());
+            }
         }
         return response;
     }

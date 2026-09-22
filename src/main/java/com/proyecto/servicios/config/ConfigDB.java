@@ -45,7 +45,7 @@ public class ConfigDB {
             config.setPassword(env.getProperty("spring.datasource.password"));
             config.setUsername(env.getProperty("spring.datasource.username"));
             config.setMaximumPoolSize(10);
-            config.setMaxLifetime(18800);
+            config.setMaxLifetime(600000);
             config.setConnectionTimeout(5000);
             config.setValidationTimeout(5000);
             config.setMinimumIdle(2);
@@ -77,6 +77,7 @@ public class ConfigDB {
             properties.put("hibernate.show-sql", false);
             properties.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
             properties.put("jakarta.persistence.query.timeout", 600000);
+            em.setJpaPropertyMap(properties);
 
 
         } catch (Exception e) {
