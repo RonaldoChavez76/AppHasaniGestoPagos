@@ -6,6 +6,7 @@ import com.proyecto.servicios.model.ResponseDTO;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductXmlResponse;
 import com.proyecto.servicios.repositorys.gestopago.GestoPagoCatalogProductRepository;
 import com.proyecto.servicios.service.GestoPagoTokenService;
+import org.springframework.data.redis.core.RedisTemplate;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Unmarshaller;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,7 @@ class GestoPagoCatalogServiceImplTest {
         GestoPagoXmlProductsClient productClient = Mockito.mock(GestoPagoXmlProductsClient.class);
         GestoPagoCatalogProductRepository productRepository = Mockito.mock(GestoPagoCatalogProductRepository.class);
         GestoPagoTokenService tokenService = Mockito.mock(GestoPagoTokenService.class);
+        RedisTemplate<String, Object> redisTemplate = Mockito.mock(RedisTemplate.class);
 
         GestoPagoCatalogProduct productoLocal = new GestoPagoCatalogProduct();
         productoLocal.setProductId("P-100");
@@ -39,6 +41,7 @@ class GestoPagoCatalogServiceImplTest {
                 productClient,
                 productRepository,
                 tokenService,
+                redisTemplate,
                 "secret-key",
                 83,
                 "GPS83-TPV-17"

@@ -1,8 +1,9 @@
 package com.proyecto.servicios.service.Impl;
 
-import com.proyecto.servicios.client.GestoPagoProductsClient;
+import com.proyecto.servicios.client.GestoPagoXmlProductsClient;
 import com.proyecto.servicios.entity.gestopago.GestoPagoToken;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductListResponse;
+import com.proyecto.servicios.model.gestopago.GestoPagoProductXmlResponse;
 import com.proyecto.servicios.service.GestoPagoTokenService;
 import feign.FeignException;
 import feign.Request;
@@ -19,6 +20,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -28,7 +30,7 @@ import java.util.Optional;
 class GestoPagoProductServiceImplTest {
 
     @Mock
-    private GestoPagoProductsClient productsClient;
+    private GestoPagoXmlProductsClient productsClient;
 
     @Mock
     private GestoPagoTokenService tokenService;
@@ -46,14 +48,14 @@ class GestoPagoProductServiceImplTest {
 
     @Test
     void debeConsultarProductosConBearerToken() {
-        GestoPagoProductListResponse expected = new GestoPagoProductListResponse();
-        when(productsClient.getProductList(anyString(), anyString(), anyString())).thenReturn(expected);
+        when(productsClient.getProductListXml(anyString(), anyString(), anyString()))
+            .thenReturn(new GestoPagoProductXmlResponse());
 
         GestoPagoProductListResponse actual = productService.obtenerProductos();
 
         ArgumentCaptor<String> authorization = ArgumentCaptor.forClass(String.class);
-        verify(productsClient).getProductList(authorization.capture(), org.mockito.ArgumentMatchers.eq("configured-api-key"), org.mockito.ArgumentMatchers.eq("application/json"));
-        org.junit.jupiter.api.Assertions.assertSame(expected, actual);
+        verify(productsClient).getProductListXml(authorization.capture(), org.mockito.ArgumentMatchers.eq("configured-api-key"), org.mockito.ArgumentMatchers.eq("application/xml"));
+        assertNotNull(actual);
         assertEquals("Bearer configured-token", authorization.getValue());
     }
 
@@ -64,7 +66,7 @@ class GestoPagoProductServiceImplTest {
                 .request(Request.create(Request.HttpMethod.GET, "/sistema/service/getProductList.do",
                         Map.of(), null, StandardCharsets.UTF_8, null))
                 .build());
-        when(productsClient.getProductList(anyString(), anyString(), anyString())).thenThrow(exception);
+        when(productsClient.getProductListXml(anyString(), anyString(), anyString())).thenThrow(exception);
 
         GestoPagoIntegrationException actual = assertThrows(
             GestoPagoIntegrationException.class, () -> productService.obtenerProductos());
@@ -76,7 +78,7 @@ class GestoPagoProductServiceImplTest {
         void debeTraducirTimeout() {
         Request request = Request.create(Request.HttpMethod.GET, "/sistema/service/getProductList.do",
             Map.of(), null, StandardCharsets.UTF_8, null);
-        when(productsClient.getProductList(anyString(), anyString(), anyString())).thenThrow(new RetryableException(
+        when(productsClient.getProductListXml(anyString(), anyString(), anyString())).thenThrow(new RetryableException(
             0, "timeout", Request.HttpMethod.GET, new RuntimeException("timeout"), (Long) null, request));
 
         GestoPagoIntegrationException actual = assertThrows(
