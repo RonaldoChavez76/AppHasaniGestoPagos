@@ -1,6 +1,6 @@
 plugins {
     id 'jacoco'
-    id 'io.spring.dependency-management' version '1.1.0'
+    id 'io.spring.dependency-management' version '1.1.7'
     id 'org.springframework.boot' version '3.3.6'//Versión de componentes de spring boot
     id 'org.sonarqube' version '4.0.0.2929'
     id "org.owasp.dependencycheck" version "8.1.2"
@@ -8,8 +8,8 @@ plugins {
     id 'java'
 }
 
-group 'com.proyecto.servicio.empresa'
-version '1.0'
+group = 'com.proyecto.servicio.empresa'
+version = '1.0'
 
 java{
     sourceCompatibility=17

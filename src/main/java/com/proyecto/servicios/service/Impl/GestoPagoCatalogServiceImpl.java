@@ -13,10 +13,12 @@ import feign.FeignException;
 import feign.RetryableException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.redis.core.RedisTemplate;
+
+import java.time.Duration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,9 +29,12 @@ import java.util.Optional;
 @Slf4j
 public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
 
+    private static final String REDIS_KEY = "catalogoGestopago::catalogo-v2";
+
     private final GestoPagoXmlProductsClient productsClient;
     private final GestoPagoCatalogProductRepository catalogRepository;
     private final GestoPagoTokenService tokenService;
+    private final RedisTemplate<String, Object> redisTemplate;
     private final String apiKey;
     private final Integer idDistribuidor;
     private final String codigoDispositivo;
@@ -38,6 +43,7 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
             GestoPagoXmlProductsClient productsClient,
             GestoPagoCatalogProductRepository catalogRepository,
             GestoPagoTokenService tokenService,
+            RedisTemplate<String, Object> redisTemplate,
             @Value("${gestopago.auth.api-key}") String apiKey,
             @Value("${gestopago.auth.id-distribuidor}") Integer idDistribuidor,
             @Value("${gestopago.auth.codigo-dispositivo}") String codigoDispositivo
@@ -45,6 +51,7 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
         this.productsClient = productsClient;
         this.catalogRepository = catalogRepository;
         this.tokenService = tokenService;
+        this.redisTemplate = redisTemplate;
         this.apiKey = apiKey;
         this.idDistribuidor = idDistribuidor;
         this.codigoDispositivo = codigoDispositivo;
@@ -93,11 +100,22 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
     }
 
     @Override
-    @Cacheable(value = "catalogoGestopago", key = "'catalogo-v2'", unless = "#result == null || #result.getData() == null || #result.getData().isEmpty()")
     public ResponseDTO<List<GestoPagoCatalogProduct>> consultarCatalogo() {
+        Object cachedValue = redisTemplate.opsForValue().get(REDIS_KEY);
+        if (cachedValue instanceof ResponseDTO<?> cachedResponse
+                && cachedResponse.getData() instanceof List<?> data
+                && !data.isEmpty()) {
+            log.info("Cache hit de Redis para la clave {}", REDIS_KEY);
+            @SuppressWarnings("unchecked")
+            ResponseDTO<List<GestoPagoCatalogProduct>> typedResponse =
+                    (ResponseDTO<List<GestoPagoCatalogProduct>>) (ResponseDTO<?>) cachedResponse;
+            return typedResponse;
+        }
+
+        log.info("Cache miss de Redis para la clave {}; consultando PostgreSQL o GestoPago", REDIS_KEY);
         List<GestoPagoCatalogProduct> cache = catalogRepository.findAll();
         if (!cache.isEmpty()) {
-            return ResponseDTO.success(0, "Respuesta desde PostgreSQL", cache);
+            return guardarEnCache(ResponseDTO.success(0, "Catálogo cargado desde PostgreSQL", cache));
         }
 
         try {
@@ -113,16 +131,25 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
             }
             List<GestoPagoCatalogProduct> productos = mapXmlToEntity(items);
             catalogRepository.saveAll(productos);
-            return ResponseDTO.success(0, "Respuesta desde GestoPago", productos);
+            return guardarEnCache(ResponseDTO.success(0, "Catálogo cargado desde GestoPago", productos));
         } catch (RetryableException ex) {
             log.error("Timeout externo al consultar catálogo. Se usa fallback local.", ex);
             List<GestoPagoCatalogProduct> local = catalogRepository.findAll();
-            return ResponseDTO.success(0, "Respuesta desde caché local por fallo en servicio externo", local);
+            return guardarEnCache(ResponseDTO.success(0, "Catálogo cargado desde caché local por fallo en servicio externo", local));
         } catch (FeignException ex) {
             log.error("Fallo externo al consultar catálogo. Se usa fallback local.", ex);
             List<GestoPagoCatalogProduct> local = catalogRepository.findAll();
-            return ResponseDTO.success(0, "Respuesta desde caché local por fallo en servicio externo", local);
+            return guardarEnCache(ResponseDTO.success(0, "Catálogo cargado desde caché local por fallo en servicio externo", local));
         }
+    }
+
+    private ResponseDTO<List<GestoPagoCatalogProduct>> guardarEnCache(
+            ResponseDTO<List<GestoPagoCatalogProduct>> response) {
+        if (response.getData() != null && !response.getData().isEmpty()) {
+            redisTemplate.opsForValue().set(REDIS_KEY, response, Duration.ofMinutes(10));
+            log.info("Catálogo guardado en Redis con la clave {}", REDIS_KEY);
+        }
+        return response;
     }
 
     @Override
