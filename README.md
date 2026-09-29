@@ -97,7 +97,7 @@ La aplicación ejecuta las migraciones Flyway al iniciar:
 La conexión local predeterminada es:
 
 ```text
-jdbc:postgresql://localhost:5432/postgres
+jdbc:postgresql://localhost:5432/PWA
 ```
 
 ## Ejecución
