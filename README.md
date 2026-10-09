@@ -93,12 +93,16 @@ La aplicación ejecuta las migraciones Flyway al iniciar:
 
 - `V1__create_gestopago_tokens.sql`: crea la tabla de tokens.
 - `V2__create_gestopago_catalog_products.sql`: crea la tabla e índice del catálogo.
+- `V3__create_onboarding_tables.sql`: crea clientes, domicilios, usuarios, cuentas y referencias faciales.
+- `V4__remove_duplicated_user_email.sql`: establece `clientes.correo` como correo único para el acceso.
 
 La conexión local predeterminada es:
 
 ```text
 jdbc:postgresql://localhost:5432/PWA
 ```
+
+El detalle de tablas, endpoints del onboarding, autenticación, validaciones y pruebas está en [docs/ONBOARDING.md](./docs/ONBOARDING.md); el diagrama entidad-relación está en [docs/DIAGRAMA_ER.md](./docs/DIAGRAMA_ER.md).
 
 ## Ejecución
 
@@ -113,6 +117,34 @@ La aplicación queda disponible en:
 ```text
 http://localhost:8080
 ```
+
+## Despliegue en Render con Docker
+
+El repositorio incluye un `Dockerfile` multi-stage que compila con Java 17 y Gradle Wrapper,
+ejecuta las pruebas y empaqueta la aplicación en una imagen de ejecución Java 17 no-root.
+Render proporciona el puerto mediante `PORT`; localmente la aplicación usa `8080`.
+
+Al crear el Web Service en Render, selecciona el repositorio y el entorno Docker. Configura
+las variables de entorno requeridas en el panel, nunca en el repositorio:
+
+```text
+SPRING_DATASOURCE_URL=jdbc:postgresql://<HOST_INTERNO>:5432/<BASE>
+SPRING_DATASOURCE_USERNAME=<USUARIO_POSTGRES>
+SPRING_DATASOURCE_PASSWORD=<CONTRASENA_POSTGRES>
+JWT_SECRET=<CLAVE_BASE64_ALEATORIA_DE_AL_MENOS_32_BYTES>
+GESTOPAGO_AUTH_PASSWORD=<CONTRASENA_DEL_PROVEEDOR>
+GESTOPAGO_API_KEY=<API_KEY_DEL_PROVEEDOR>
+```
+
+Redis está habilitado para la caché de la aplicación, así que configura también
+`SPRING_DATA_REDIS_HOST` y `SPRING_DATA_REDIS_PORT` con los datos de un servicio Redis
+accesible desde Render (y `SPRING_DATA_REDIS_PASSWORD` si ese servicio requiere contraseña);
+no dejes el host local `localhost`.
+
+La aplicación ejecuta Flyway al iniciar. Apunta la configuración a la base correcta y
+respalda los datos antes de desplegar migraciones en una base con información existente.
+No configures una ruta de comprobación de salud en Render hasta añadir Actuator o un endpoint
+de salud: el proyecto actualmente no incluye Spring Boot Actuator.
 
 El Config Server está configurado como opcional. Si no existe un servidor en `localhost:8888`, aparecerá un aviso, pero la aplicación usará la configuración local.
 
@@ -201,7 +233,9 @@ src/main/resources/
 ├── application.properties
 └── db/migration/
     ├── V1__create_gestopago_tokens.sql
-    └── V2__create_gestopago_catalog_products.sql
+    ├── V2__create_gestopago_catalog_products.sql
+    ├── V3__create_onboarding_tables.sql
+    └── V4__remove_duplicated_user_email.sql
 ```
 
 ## Advertencias conocidas
