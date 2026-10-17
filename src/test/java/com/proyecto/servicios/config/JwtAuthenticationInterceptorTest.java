@@ -2,7 +2,6 @@ package com.proyecto.servicios.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.proyecto.servicios.entity.onboarding.RolUsuario;
-import com.proyecto.servicios.repositorys.onboarding.CuentaRepository;
 import com.proyecto.servicios.repositorys.onboarding.UsuarioRepository;
 import com.proyecto.servicios.service.onboarding.JwtTokenService;
 import org.junit.jupiter.api.Test;
@@ -18,10 +17,9 @@ class JwtAuthenticationInterceptorTest {
 
     private final JwtTokenService tokenService = mock(JwtTokenService.class);
     private final UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
-    private final CuentaRepository cuentaRepository = mock(CuentaRepository.class);
     private final JwtAuthenticationInterceptor interceptor =
             new JwtAuthenticationInterceptor(
-                    tokenService, usuarioRepository, cuentaRepository, new ObjectMapper().findAndRegisterModules());
+                    tokenService, usuarioRepository, new ObjectMapper().findAndRegisterModules());
 
     @Test
     void permiteRegistroPublicoDeCliente() throws Exception {
@@ -39,6 +37,10 @@ class JwtAuthenticationInterceptorTest {
 
         assertFalse(interceptor.preHandle(request, response, new Object()));
         assertEquals(401, response.getStatus());
+        assertTrue(response.getContentAsString().contains("\"status\":401"));
+        assertTrue(response.getContentAsString().contains("\"message\":"));
+        assertTrue(response.getContentAsString().contains("\"data\":null"));
+        assertTrue(response.getContentAsString().contains("\"timestamp\":"));
         verifyNoInteractions(tokenService, usuarioRepository);
     }
 
@@ -48,8 +50,7 @@ class JwtAuthenticationInterceptorTest {
                 new JwtTokenService.AuthenticatedUser(2L, 1L, "cliente@example.com");
         when(tokenService.validar("jwt")).thenReturn(Optional.of(user));
         when(usuarioRepository.findRolActivaById(2L)).thenReturn(Optional.of(RolUsuario.CLIENTE));
-        when(cuentaRepository.existsByNumeroCuentaAndClienteId("123", 1L)).thenReturn(true);
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/cuentas/123");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/cuentas/busqueda");
         request.addHeader("Authorization", "Bearer jwt");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -57,7 +58,6 @@ class JwtAuthenticationInterceptorTest {
         assertEquals(user, request.getAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE));
         verify(tokenService).validar("jwt");
         verify(usuarioRepository).findRolActivaById(2L);
-        verify(cuentaRepository).existsByNumeroCuentaAndClienteId("123", 1L);
     }
 
     @Test
@@ -75,12 +75,12 @@ class JwtAuthenticationInterceptorTest {
     }
 
     @Test
-    void permiteAlClienteConsultarSoloSuPropioPerfil() throws Exception {
+    void permiteConsultaEstaticaParaQueElControladorValideLaPropiedad() throws Exception {
         JwtTokenService.AuthenticatedUser user =
                 new JwtTokenService.AuthenticatedUser(2L, 1L, "cliente@example.com");
         when(tokenService.validar("jwt")).thenReturn(Optional.of(user));
         when(usuarioRepository.findRolActivaById(2L)).thenReturn(Optional.of(RolUsuario.CLIENTE));
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/clientes/1");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/clientes/consulta");
         request.addHeader("Authorization", "Bearer jwt");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -99,6 +99,19 @@ class JwtAuthenticationInterceptorTest {
 
         assertFalse(interceptor.preHandle(request, response, new Object()));
         assertEquals(403, response.getStatus());
+    }
+
+    @Test
+    void permiteLaBusquedaEstaticaParaQueElControladorValideLosFiltros() throws Exception {
+        JwtTokenService.AuthenticatedUser user =
+                new JwtTokenService.AuthenticatedUser(2L, 1L, "cliente@example.com");
+        when(tokenService.validar("jwt")).thenReturn(Optional.of(user));
+        when(usuarioRepository.findRolActivaById(2L)).thenReturn(Optional.of(RolUsuario.CLIENTE));
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/clientes/busqueda");
+        request.addHeader("Authorization", "Bearer jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertTrue(interceptor.preHandle(request, response, new Object()));
     }
 
     @Test
@@ -134,13 +147,11 @@ class JwtAuthenticationInterceptorTest {
                 new JwtTokenService.AuthenticatedUser(2L, 1L, "cliente@example.com");
         when(tokenService.validar("jwt")).thenReturn(Optional.of(user));
         when(usuarioRepository.findRolActivaById(2L)).thenReturn(Optional.of(RolUsuario.CLIENTE));
-        when(cuentaRepository.existsByNumeroCuentaAndClienteId("otra-cuenta", 1L)).thenReturn(false);
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/cuentas/otra-cuenta/saldo");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/cuentas/busqueda");
         request.addHeader("Authorization", "Bearer jwt");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        assertFalse(interceptor.preHandle(request, response, new Object()));
-        assertEquals(403, response.getStatus());
+        assertTrue(interceptor.preHandle(request, response, new Object()));
     }
 
     @Test
@@ -149,7 +160,7 @@ class JwtAuthenticationInterceptorTest {
                 new JwtTokenService.AuthenticatedUser(2L, 1L, "cliente@example.com");
         when(tokenService.validar("jwt")).thenReturn(Optional.of(user));
         when(usuarioRepository.findRolActivaById(2L)).thenReturn(Optional.of(RolUsuario.CLIENTE));
-        MockHttpServletRequest request = new MockHttpServletRequest("DELETE", "/clientes/1");
+        MockHttpServletRequest request = new MockHttpServletRequest("DELETE", "/clientes/baja");
         request.addHeader("Authorization", "Bearer jwt");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -157,16 +168,15 @@ class JwtAuthenticationInterceptorTest {
     }
 
     @Test
-    void deniegaAlClienteDarseDeBajaOtroCliente() throws Exception {
+    void permiteRutaBajaEstaticaParaQueElControladorValideElId() throws Exception {
         JwtTokenService.AuthenticatedUser user =
                 new JwtTokenService.AuthenticatedUser(2L, 1L, "cliente@example.com");
         when(tokenService.validar("jwt")).thenReturn(Optional.of(user));
         when(usuarioRepository.findRolActivaById(2L)).thenReturn(Optional.of(RolUsuario.CLIENTE));
-        MockHttpServletRequest request = new MockHttpServletRequest("DELETE", "/clientes/99");
+        MockHttpServletRequest request = new MockHttpServletRequest("DELETE", "/clientes/baja");
         request.addHeader("Authorization", "Bearer jwt");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        assertFalse(interceptor.preHandle(request, response, new Object()));
-        assertEquals(403, response.getStatus());
+        assertTrue(interceptor.preHandle(request, response, new Object()));
     }
 }

@@ -1,6 +1,6 @@
 # AppGestoPagos
 
-Servicio Spring Boot para la integración con GestoPago, consulta de personas y administración local del catálogo de productos.
+Servicio Spring Boot para la integración con GestoPago y el onboarding de clientes persona física.
 
 ## Tecnologías
 
@@ -174,7 +174,7 @@ Ejemplo con PowerShell:
 Invoke-RestMethod http://localhost:8080/api/gestopago/catalogo
 ```
 
-La respuesta contiene `codigo`, `mensaje` y `data`. El campo `data` contiene los productos disponibles.
+La respuesta usa la envoltura común `{status, message, data, timestamp}`. El campo `data` contiene los productos disponibles como DTOs, no entidades JPA.
 
 ## Verificar Redis
 
@@ -197,7 +197,7 @@ redis-cli ping
 redis-cli KEYS "*catalogoGestopago*"
 ```
 
-La caché del catálogo utiliza el nombre `catalogoGestopago` y la clave lógica `catalogo-v2`. No existe un endpoint HTTP directo de Redis; se valida a través de `/api/gestopago/catalogo`.
+La caché del catálogo utiliza el nombre `catalogoGestopago` y la clave lógica `catalogo-v2`. No existe un endpoint HTTP directo de Redis; se valida a través de `/api/gestopago/catalogo`. `ResponseDTO` es un formato interno de la capa de servicio/cache y no se expone desde los controladores.
 
 Para comprobar el caché funcionalmente, ejecuta dos veces el endpoint. Ambas respuestas deben ser `HTTP 200`; la segunda puede resolverse desde Redis sin repetir la consulta externa.
 

@@ -3,9 +3,12 @@ package com.proyecto.servicios.service.Impl.onboarding;
 import com.proyecto.servicios.entity.onboarding.Cuenta;
 import com.proyecto.servicios.model.onboarding.CuentaResponse;
 import com.proyecto.servicios.model.onboarding.SaldoCuentaResponse;
+import com.proyecto.servicios.model.onboarding.BuscarCuentasRequest;
 import com.proyecto.servicios.repositorys.onboarding.CuentaRepository;
+import com.proyecto.servicios.repositorys.onboarding.CuentaSpecifications;
 import com.proyecto.servicios.service.onboarding.CuentaConsultaService;
 import com.proyecto.servicios.service.onboarding.CuentaNoEncontradaException;
+import com.proyecto.servicios.service.onboarding.PageRequestFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -39,6 +42,14 @@ public class CuentaConsultaServiceImpl implements CuentaConsultaService {
     @Transactional(transactionManager = "sfTransactionManager", readOnly = true)
     public Page<CuentaResponse> listarActivas(Pageable pageable) {
         return cuentaRepository.findAllByEstatus("ACTIVA", pageable).map(this::respuesta);
+    }
+
+    @Override
+    @Transactional(transactionManager = "sfTransactionManager", readOnly = true)
+    public Page<CuentaResponse> buscar(BuscarCuentasRequest filtros) {
+        Pageable pageable = PageRequestFactory.create(filtros.page(), filtros.size());
+        return cuentaRepository.findAll(CuentaSpecifications.conFiltros(filtros), pageable)
+                .map(this::respuesta);
     }
 
     private CuentaResponse respuesta(Cuenta cuenta) {

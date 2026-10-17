@@ -3,14 +3,17 @@ package com.proyecto.servicios.service.Impl.onboarding;
 import com.proyecto.servicios.entity.onboarding.Cliente;
 import com.proyecto.servicios.entity.onboarding.Domicilio;
 import com.proyecto.servicios.model.onboarding.ActualizarClienteRequest;
+import com.proyecto.servicios.model.onboarding.BuscarClientesRequest;
 import com.proyecto.servicios.model.onboarding.ClienteResponse;
 import com.proyecto.servicios.model.onboarding.DomicilioRequest;
 import com.proyecto.servicios.model.onboarding.DomicilioResponse;
 import com.proyecto.servicios.repositorys.onboarding.ClienteRepository;
+import com.proyecto.servicios.repositorys.onboarding.ClienteSpecifications;
 import com.proyecto.servicios.service.onboarding.ClienteConsultaService;
 import com.proyecto.servicios.service.onboarding.ClienteDuplicadoException;
 import com.proyecto.servicios.service.onboarding.ClienteNoEncontradoException;
 import com.proyecto.servicios.service.onboarding.CuentaNoEncontradaException;
+import com.proyecto.servicios.service.onboarding.PageRequestFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -35,6 +38,14 @@ public class ClienteConsultaServiceImpl implements ClienteConsultaService {
     @Transactional(transactionManager = "sfTransactionManager", readOnly = true)
     public Page<ClienteResponse> listarTodos(Pageable pageable) {
         return clienteRepository.findAll(pageable).map(this::respuesta);
+    }
+
+    @Override
+    @Transactional(transactionManager = "sfTransactionManager", readOnly = true)
+    public Page<ClienteResponse> buscar(BuscarClientesRequest filtros) {
+        Pageable pageable = PageRequestFactory.create(filtros.page(), filtros.size());
+        return clienteRepository.findAll(ClienteSpecifications.conFiltros(filtros), pageable)
+                .map(this::respuesta);
     }
 
     @Override

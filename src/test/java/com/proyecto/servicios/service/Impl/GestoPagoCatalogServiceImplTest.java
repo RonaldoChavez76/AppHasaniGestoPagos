@@ -3,6 +3,7 @@ package com.proyecto.servicios.service.Impl;
 import com.proyecto.servicios.client.GestoPagoXmlProductsClient;
 import com.proyecto.servicios.entity.gestopago.GestoPagoCatalogProduct;
 import com.proyecto.servicios.model.ResponseDTO;
+import com.proyecto.servicios.model.gestopago.GestoPagoCatalogProductResponse;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductXmlResponse;
 import com.proyecto.servicios.repositorys.gestopago.GestoPagoCatalogProductRepository;
 import com.proyecto.servicios.service.GestoPagoTokenService;
@@ -47,7 +48,7 @@ class GestoPagoCatalogServiceImplTest {
                 "GPS83-TPV-17"
         );
 
-        ResponseDTO<List<GestoPagoCatalogProduct>> response = service.consultarCatalogoDesdeBaseLocal();
+        ResponseDTO<List<GestoPagoCatalogProductResponse>> response = service.consultarCatalogoDesdeBaseLocal();
 
         assertNotNull(response);
         assertEquals(0, response.getCodigo());
@@ -107,12 +108,12 @@ class GestoPagoCatalogServiceImplTest {
                 productClient, productRepository, tokenService, redisTemplate, "secret-key", 83, "GPS83-TPV-17"
         );
 
-        ResponseDTO<List<GestoPagoCatalogProduct>> resultado = service.consultarCatalogo();
+        ResponseDTO<List<GestoPagoCatalogProductResponse>> resultado = service.consultarCatalogo();
 
         assertNotNull(resultado);
         assertEquals(0, resultado.getCodigo());
         assertEquals(1, resultado.getData().size());
-        assertEquals("Recarga", resultado.getData().get(0).getName());
+        assertEquals("Recarga", resultado.getData().get(0).name());
         Mockito.verifyNoInteractions(productRepository);
         Mockito.verifyNoInteractions(productClient);
     }
@@ -139,7 +140,7 @@ class GestoPagoCatalogServiceImplTest {
                 productClient, productRepository, tokenService, redisTemplate, "secret-key", 83, "GPS83-TPV-17"
         );
 
-        ResponseDTO<List<GestoPagoCatalogProduct>> resultado = service.consultarCatalogo();
+        ResponseDTO<List<GestoPagoCatalogProductResponse>> resultado = service.consultarCatalogo();
 
         assertNotNull(resultado);
         assertEquals(0, resultado.getCodigo());
@@ -176,7 +177,7 @@ class GestoPagoCatalogServiceImplTest {
                 productClient, productRepository, tokenService, redisTemplate, "secret-key", 83, "GPS83-TPV-17"
         );
 
-        ResponseDTO<List<GestoPagoCatalogProduct>> resultado = service.consultarCatalogo();
+        ResponseDTO<List<GestoPagoCatalogProductResponse>> resultado = service.consultarCatalogo();
 
         assertNotNull(resultado);
         assertEquals(0, resultado.getCodigo());

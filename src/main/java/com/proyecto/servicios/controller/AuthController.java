@@ -2,6 +2,7 @@ package com.proyecto.servicios.controller;
 
 import com.proyecto.servicios.model.onboarding.LoginRequest;
 import com.proyecto.servicios.model.onboarding.LoginResponse;
+import com.proyecto.servicios.model.ApiResponse;
 import com.proyecto.servicios.service.onboarding.AutenticacionService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -22,7 +23,8 @@ public class AuthController {
     }
 
     @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<LoginResponse> iniciarSesion(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(autenticacionService.iniciarSesion(request));
+    public ResponseEntity<ApiResponse<LoginResponse>> iniciarSesion(@Valid @RequestBody LoginRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                200, "Inicio de sesión exitoso.", autenticacionService.iniciarSesion(request)));
     }
 }

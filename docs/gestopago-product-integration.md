@@ -19,7 +19,7 @@ Tambien se requieren `DB_PASSWORD` y `GESTOPAGO_AUTH_PASSWORD`. El archivo `.env
 
 - `GestoPagoProductListResponse`: respuesta principal del proveedor con `code`, `message`, `data` y campos adicionales.
 - `GestoPagoProductDto`: modelo auxiliar para productos cuando se conoce el contrato detallado del proveedor.
-- `IntegrationErrorResponse`: respuesta controlada para errores de integración.
+- `ApiResponse`: envoltura común para respuestas exitosas y errores de integración.
 
 El contrato detallado del proveedor puede variar; por eso la respuesta conserva `data` como `JsonNode` sin perder campos.
 

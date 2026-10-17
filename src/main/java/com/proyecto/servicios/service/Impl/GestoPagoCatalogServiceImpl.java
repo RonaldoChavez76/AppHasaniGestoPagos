@@ -4,6 +4,7 @@ import com.proyecto.servicios.client.GestoPagoXmlProductsClient;
 import com.proyecto.servicios.entity.gestopago.GestoPagoCatalogProduct;
 import com.proyecto.servicios.entity.gestopago.GestoPagoToken;
 import com.proyecto.servicios.model.ResponseDTO;
+import com.proyecto.servicios.model.gestopago.GestoPagoCatalogProductResponse;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductXmlItem;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductXmlResponse;
 import com.proyecto.servicios.repositorys.gestopago.GestoPagoCatalogProductRepository;
@@ -105,7 +106,11 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
     }
 
     @Override
-    public ResponseDTO<List<GestoPagoCatalogProduct>> consultarCatalogo() {
+    public ResponseDTO<List<GestoPagoCatalogProductResponse>> consultarCatalogo() {
+        return mapearRespuesta(consultarCatalogoDesdeCacheBaseOExterno());
+    }
+
+    private ResponseDTO<List<GestoPagoCatalogProduct>> consultarCatalogoDesdeCacheBaseOExterno() {
         // 1. NIVEL 1: Consultar Redis (Caché en memoria)
         ResponseDTO<List<GestoPagoCatalogProduct>> cached = consultarCacheRedis();
         if (cached != null) {
@@ -202,12 +207,38 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
     }
 
     @Override
-    public ResponseDTO<List<GestoPagoCatalogProduct>> consultarCatalogoDesdeBaseLocal() {
+    public ResponseDTO<List<GestoPagoCatalogProductResponse>> consultarCatalogoDesdeBaseLocal() {
         List<GestoPagoCatalogProduct> local = catalogRepository.findAll();
         if (local.isEmpty()) {
             return ResponseDTO.failure(1, "No hay información en la base local");
         }
-        return ResponseDTO.success(0, "Respuesta desde caché local por fallo en servicio externo", local);
+        return mapearRespuesta(ResponseDTO.success(
+                0, "Respuesta desde caché local por fallo en servicio externo", local));
+    }
+
+    private ResponseDTO<List<GestoPagoCatalogProductResponse>> mapearRespuesta(
+            ResponseDTO<List<GestoPagoCatalogProduct>> response
+    ) {
+        if (response.getData() == null) {
+            return ResponseDTO.failure(response.getCodigo(), response.getMensaje());
+        }
+        List<GestoPagoCatalogProductResponse> productos = response.getData().stream()
+                .map(this::toResponse)
+                .toList();
+        return ResponseDTO.success(response.getCodigo(), response.getMensaje(), productos);
+    }
+
+    private GestoPagoCatalogProductResponse toResponse(GestoPagoCatalogProduct producto) {
+        return new GestoPagoCatalogProductResponse(
+                producto.getId(),
+                producto.getProductId(),
+                producto.getCode(),
+                producto.getName(),
+                producto.getPrice(),
+                producto.getActive(),
+                producto.getCreatedAt(),
+                producto.getUpdatedAt()
+        );
     }
 
     private List<GestoPagoCatalogProduct> mapXmlToEntity(List<GestoPagoProductXmlItem> items) {
