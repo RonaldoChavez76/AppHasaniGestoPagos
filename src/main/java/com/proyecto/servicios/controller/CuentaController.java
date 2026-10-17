@@ -1,16 +1,21 @@
 package com.proyecto.servicios.controller;
 
+import com.proyecto.servicios.config.JwtAuthenticationInterceptor;
+import com.proyecto.servicios.entity.onboarding.RolUsuario;
+import com.proyecto.servicios.model.onboarding.BuscarCuentasRequest;
 import com.proyecto.servicios.model.onboarding.CuentaResponse;
-import com.proyecto.servicios.model.onboarding.SaldoCuentaResponse;
 import com.proyecto.servicios.model.onboarding.PageResponse;
+import com.proyecto.servicios.model.ApiResponse;
+import com.proyecto.servicios.service.onboarding.AccesoNoAutorizadoException;
 import com.proyecto.servicios.service.onboarding.CuentaConsultaService;
-import com.proyecto.servicios.service.onboarding.PageRequestFactory;
+import com.proyecto.servicios.service.onboarding.JwtTokenService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -23,24 +28,32 @@ public class CuentaController {
         this.cuentaConsultaService = cuentaConsultaService;
     }
 
-    @GetMapping(value = "/activas", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/busqueda", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
     @SecurityRequirement(name = "bearerAuth")
-    public PageResponse<CuentaResponse> listarActivas(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+    public ApiResponse<PageResponse<CuentaResponse>> buscar(
+            @Valid @RequestBody BuscarCuentasRequest filtros,
+            HttpServletRequest request
     ) {
-        return PageResponse.from(cuentaConsultaService.listarActivas(PageRequestFactory.create(page, size)));
-    }
-
-    @GetMapping(value = "/{numeroCuenta}", produces = MediaType.APPLICATION_JSON_VALUE)
-    @SecurityRequirement(name = "bearerAuth")
-    public CuentaResponse obtenerPorNumero(@PathVariable String numeroCuenta) {
-        return cuentaConsultaService.obtenerPorNumero(numeroCuenta);
-    }
-
-    @GetMapping(value = "/{numeroCuenta}/saldo", produces = MediaType.APPLICATION_JSON_VALUE)
-    @SecurityRequirement(name = "bearerAuth")
-    public SaldoCuentaResponse obtenerSaldo(@PathVariable String numeroCuenta) {
-        return cuentaConsultaService.obtenerSaldo(numeroCuenta);
+        Object role = request.getAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_ROLE_ATTRIBUTE);
+        if (!(role instanceof RolUsuario)) {
+            throw new AccesoNoAutorizadoException();
+        }
+        if (role == RolUsuario.CLIENTE) {
+            if (filtros.numeroCuenta() == null) {
+                throw new AccesoNoAutorizadoException();
+            }
+            Object authenticated = request.getAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE);
+            if (!(authenticated instanceof JwtTokenService.AuthenticatedUser user)) {
+                throw new AccesoNoAutorizadoException();
+            }
+            if (user.clienteId() == null) {
+                throw new AccesoNoAutorizadoException();
+            }
+            filtros = new BuscarCuentasRequest(filtros.numeroCuenta(), user.clienteId(),
+                    filtros.soloActivas(), filtros.page(), filtros.size());
+        }
+        return ApiResponse.success(200, "Búsqueda de cuentas completada.",
+                PageResponse.from(cuentaConsultaService.buscar(filtros)));
     }
 }

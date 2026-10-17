@@ -3,6 +3,7 @@ package com.proyecto.servicios.service.Impl.onboarding;
 import com.proyecto.servicios.entity.onboarding.Cliente;
 import com.proyecto.servicios.entity.onboarding.Domicilio;
 import com.proyecto.servicios.model.onboarding.ActualizarClienteRequest;
+import com.proyecto.servicios.model.onboarding.BuscarClientesRequest;
 import com.proyecto.servicios.model.onboarding.DomicilioRequest;
 import com.proyecto.servicios.repositorys.onboarding.ClienteRepository;
 import com.proyecto.servicios.service.onboarding.ClienteDuplicadoException;
@@ -10,6 +11,11 @@ import com.proyecto.servicios.service.onboarding.ClienteNoEncontradoException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -80,6 +86,24 @@ class ClienteConsultaServiceImplTest {
         when(clienteRepository.findWithDomicilioById(99L)).thenReturn(Optional.empty());
 
         assertThrows(ClienteNoEncontradoException.class, () -> service.obtenerPorId(99L));
+    }
+
+    @Test
+    void buscarUsaFiltrosCombinadosYConservaLaPaginacion() {
+        var filtros = new BuscarClientesRequest(" ana ", "ABCD010101ABC", null,
+                null, null, null, null, null, null, 2, 10);
+        PageRequest pageable = PageRequest.of(2, 10);
+        when(clienteRepository.findAll(
+                org.mockito.ArgumentMatchers.<Specification<Cliente>>any(), any(Pageable.class)))
+                .thenReturn(Page.empty(pageable));
+
+        Page<?> resultado = service.buscar(filtros);
+
+        assertEquals(2, resultado.getNumber());
+        assertEquals(10, resultado.getSize());
+        verify(clienteRepository).findAll(
+                org.mockito.ArgumentMatchers.<Specification<Cliente>>any(),
+                eq(PageRequest.of(2, 10, Sort.by("id").ascending())));
     }
 
     private Cliente clienteExistente() {

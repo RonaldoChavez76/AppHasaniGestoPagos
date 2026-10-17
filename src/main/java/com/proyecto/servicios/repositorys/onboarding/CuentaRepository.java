@@ -4,10 +4,11 @@ import com.proyecto.servicios.entity.onboarding.Cuenta;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.Optional;
 
-public interface CuentaRepository extends JpaRepository<Cuenta, Long> {
+public interface CuentaRepository extends JpaRepository<Cuenta, Long>, JpaSpecificationExecutor<Cuenta> {
 
     boolean existsByNumeroCuenta(String numeroCuenta);
 

@@ -1,6 +1,7 @@
 package com.proyecto.servicios.service.onboarding;
 
 import com.proyecto.servicios.model.onboarding.ActualizarClienteRequest;
+import com.proyecto.servicios.model.onboarding.BuscarClientesRequest;
 import com.proyecto.servicios.model.onboarding.ClienteResponse;
 import org.springframework.data.domain.Page;
 
@@ -10,6 +11,8 @@ import org.springframework.data.domain.Pageable;
 public interface ClienteConsultaService {
 
     Page<ClienteResponse> listarTodos(Pageable pageable);
+
+    Page<ClienteResponse> buscar(BuscarClientesRequest filtros);
 
     Page<ClienteResponse> listarActivos(Pageable pageable);
 

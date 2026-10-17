@@ -5,11 +5,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
 
-public interface ClienteRepository extends JpaRepository<Cliente, Long> {
+public interface ClienteRepository extends JpaRepository<Cliente, Long>, JpaSpecificationExecutor<Cliente> {
 
     boolean existsByCurp(String curp);
 
@@ -22,6 +24,10 @@ public interface ClienteRepository extends JpaRepository<Cliente, Long> {
     @Override
     @EntityGraph(attributePaths = {"domicilio"})
     Page<Cliente> findAll(Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"domicilio"})
+    Page<Cliente> findAll(Specification<Cliente> specification, Pageable pageable);
 
     @EntityGraph(attributePaths = {"domicilio"})
     Optional<Cliente> findWithDomicilioById(Long id);

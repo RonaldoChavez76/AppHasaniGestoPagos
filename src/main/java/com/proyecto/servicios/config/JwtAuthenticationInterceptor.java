@@ -2,8 +2,7 @@ package com.proyecto.servicios.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.proyecto.servicios.entity.onboarding.RolUsuario;
-import com.proyecto.servicios.repositorys.onboarding.CuentaRepository;
-import com.proyecto.servicios.model.IntegrationErrorResponse;
+import com.proyecto.servicios.model.ApiResponse;
 import com.proyecto.servicios.repositorys.onboarding.UsuarioRepository;
 import com.proyecto.servicios.service.onboarding.JwtTokenService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.util.Locale;
 
 @Component
@@ -28,18 +26,15 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
 
     private final JwtTokenService jwtTokenService;
     private final UsuarioRepository usuarioRepository;
-    private final CuentaRepository cuentaRepository;
     private final ObjectMapper objectMapper;
 
     public JwtAuthenticationInterceptor(
             JwtTokenService jwtTokenService,
             UsuarioRepository usuarioRepository,
-            CuentaRepository cuentaRepository,
             ObjectMapper objectMapper
     ) {
         this.jwtTokenService = jwtTokenService;
         this.usuarioRepository = usuarioRepository;
-        this.cuentaRepository = cuentaRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -73,7 +68,7 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
         }
         request.setAttribute(AUTHENTICATED_USER_ATTRIBUTE, usuario.get());
         request.setAttribute(AUTHENTICATED_ROLE_ATTRIBUTE, rol.get());
-        if (!estaAutorizado(request, usuario.get(), rol.get())) {
+        if (!estaAutorizado(request, rol.get())) {
             return rechazar(response, HttpStatus.FORBIDDEN, "No tiene permisos para realizar esta operación.");
         }
         return true;
@@ -81,7 +76,6 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
 
     private boolean estaAutorizado(
             HttpServletRequest request,
-            JwtTokenService.AuthenticatedUser usuario,
             RolUsuario rol
     ) {
         String ruta = ruta(request);
@@ -90,37 +84,15 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        if ("/clientes".equals(ruta)
-                || ruta.matches("^/clientes/(activos|registrados|curp/.*|rfc/.*|correo/.*)$")
-                || "/cuentas/activas".equals(ruta)) {
-            return false;
-        }
-
-        if (ruta.matches("^/clientes/cuenta/[^/]+$")) {
-            String numeroCuenta = ruta.substring("/clientes/cuenta/".length());
-            return cuentaRepository.existsByNumeroCuentaAndClienteId(numeroCuenta, usuario.clienteId());
-        }
-
-        if (ruta.matches("^/clientes/[0-9]+$")) {
-            boolean esPropio = esClientePropio(ruta.substring("/clientes/".length()), usuario.clienteId());
-            return esPropio && ("GET".equals(metodo) || "PUT".equals(metodo) || "DELETE".equals(metodo));
-        }
-
-        if (ruta.matches("^/cuentas/[^/]+(/saldo)?$") && "GET".equals(metodo)) {
-            String numeroCuenta = ruta.substring("/cuentas/".length()).replaceFirst("/saldo$", "");
-            return cuentaRepository.existsByNumeroCuentaAndClienteId(numeroCuenta, usuario.clienteId());
-        }
-
-        return ruta.matches("^/usuarios/[0-9]+(/password)?$")
-                && ("GET".equals(metodo) || "PUT".equals(metodo));
-    }
-
-    private boolean esClientePropio(String idRuta, Long clienteId) {
-        try {
-            return clienteId.equals(Long.valueOf(idRuta));
-        } catch (NumberFormatException exception) {
-            return false;
-        }
+        return ("POST".equals(metodo) && (
+                "/clientes/busqueda".equals(ruta)
+                        || "/clientes/consulta".equals(ruta)
+                        || "/cuentas/busqueda".equals(ruta)
+                        || "/usuarios/consulta".equals(ruta)))
+                || ("PUT".equals(metodo) && (
+                "/clientes/actualizar".equals(ruta)
+                        || "/usuarios/password".equals(ruta)))
+                || ("DELETE".equals(metodo) && "/clientes/baja".equals(ruta));
     }
 
     private String ruta(HttpServletRequest request) {
@@ -136,7 +108,7 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        objectMapper.writeValue(response.getWriter(), new IntegrationErrorResponse(status.value(), mensaje, Instant.now()));
+        objectMapper.writeValue(response.getWriter(), ApiResponse.failure(status.value(), mensaje));
         return false;
     }
 }
