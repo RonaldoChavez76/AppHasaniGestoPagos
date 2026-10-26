@@ -17,11 +17,21 @@ Tambien se requieren `DB_PASSWORD` y `GESTOPAGO_AUTH_PASSWORD`. El archivo `.env
 
 ## DTOs
 
-- `GestoPagoProductListResponse`: respuesta principal del proveedor con `code`, `message`, `data` y campos adicionales.
-- `GestoPagoProductDto`: modelo auxiliar para productos cuando se conoce el contrato detallado del proveedor.
+- `GestoPagoProductListResponse`: respuesta principal del proveedor con `code`, `message` y `data` (lista de productos).
+- `GestoPagoProductDto`: modelo completo con todos los atributos del contrato XML de GestoPago:
+  - `servicio`: nombre del servicio (e.g. `AGUAKAN (Cancun)`).
+  - `producto`: descripción del producto o paquete (e.g. `Agua Cancun`).
+  - `idServicio`: identificador numérico del servicio.
+  - `idProducto`: identificador numérico del producto.
+  - `idCatTipoServicio`: identificador del tipo de servicio.
+  - `tipoFront`: tipo de front/payload requerido para la transacción.
+  - `hasDigitoVerificador`: bandera de requerimiento de dígito verificador.
+  - `tipoReferencia`: tipo de referencia para pago.
+  - `precio`: precio final o comisión.
+  - `showAyuda`: indicador para mostrar ayuda en pantalla.
+  - `legend`: texto de ayuda o términos de la transacción (CDATA).
+  - `id`, `code`, `name`, `price`, `active`: campos estándar para compatibilidad.
 - `ApiResponse`: envoltura común para respuestas exitosas y errores de integración.
-
-El contrato detallado del proveedor puede variar; por eso la respuesta conserva `data` como `JsonNode` sin perder campos.
 
 ## Errores y logs
 

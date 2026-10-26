@@ -39,17 +39,17 @@ El modelo JAXB representa el contrato real:
 
 ### PostgreSQL y Redis
 
-PostgreSQL es la persistencia principal del catálogo y de los tokens. Redis funciona como caché mediante Spring Cache y `@Cacheable`; no se utiliza un repositorio Redis duplicado para las entidades JPA.
+PostgreSQL es la persistencia principal del catálogo y de los tokens. Redis funciona como caché en memoria gestionada mediante `RedisTemplate`, permitiendo un control granular del ciclo de vida y resiliencia ante caídas del servidor de caché; no se utiliza un repositorio Redis duplicado para las entidades JPA.
 
 El flujo del catálogo es:
 
-1. Consultar la caché Redis.
-2. Consultar PostgreSQL si no existe una entrada válida en Redis.
-3. Consultar GestoPago si no hay información local.
-4. Persistir la respuesta externa en PostgreSQL.
-5. Responder mediante la caché en las llamadas posteriores.
+1. Consultar la caché Redis (Nivel 1).
+2. Consultar PostgreSQL si no existe una entrada válida en Redis (Nivel 2).
+3. Consultar GestoPago vía OpenFeign si no hay información local (Nivel 3).
+4. Persistir la respuesta externa en PostgreSQL y poblar Redis.
+5. Responder mediante la caché en las llamadas posteriores (TTL: 10 minutos).
 
-El serializador Redis está configurado con Jackson y soporte para `LocalDateTime`, tipos Java y tipos polimórficos de `ResponseDTO`.
+El serializador Redis está configurado con Jackson (`BasicPolymorphicTypeValidator`) y soporte para tipos Java, `java.time` y tipos polimórficos de `ResponseDTO`.
 
 ### Fallback
 
@@ -81,6 +81,7 @@ Completa los valores de `.env`:
 DB_PASSWORD=tu-password-de-postgres
 GESTOPAGO_AUTH_PASSWORD=tu-password-de-gestopago
 GESTOPAGO_API_KEY=tu-api-key-de-gestopago
+JWT_SECRET=tu-clave-secreta-base64-de-al-menos-32-bytes
 ```
 
 `.env` está excluido de Git. Nunca subas contraseñas, API keys o tokens reales al repositorio.
@@ -95,6 +96,7 @@ La aplicación ejecuta las migraciones Flyway al iniciar:
 - `V2__create_gestopago_catalog_products.sql`: crea la tabla e índice del catálogo.
 - `V3__create_onboarding_tables.sql`: crea clientes, domicilios, usuarios, cuentas y referencias faciales.
 - `V4__remove_duplicated_user_email.sql`: establece `clientes.correo` como correo único para el acceso.
+- `V5__add_user_roles_and_cleanup_redundant_constraint.sql`: asigna roles (`CLIENTE`, `EJECUTIVO`) y limpia restricciones redundantes.
 
 La conexión local predeterminada es:
 
@@ -143,8 +145,8 @@ no dejes el host local `localhost`.
 
 La aplicación ejecuta Flyway al iniciar. Apunta la configuración a la base correcta y
 respalda los datos antes de desplegar migraciones en una base con información existente.
-No configures una ruta de comprobación de salud en Render hasta añadir Actuator o un endpoint
-de salud: el proyecto actualmente no incluye Spring Boot Actuator.
+Puedes configurar la comprobación de salud en Render apuntando a `/actuator/health`,
+ya que el proyecto incluye Spring Boot Actuator configurado.
 
 El Config Server está configurado como opcional. Si no existe un servidor en `localhost:8888`, aparecerá un aviso, pero la aplicación usará la configuración local.
 
@@ -235,11 +237,11 @@ src/main/resources/
     ├── V1__create_gestopago_tokens.sql
     ├── V2__create_gestopago_catalog_products.sql
     ├── V3__create_onboarding_tables.sql
-    └── V4__remove_duplicated_user_email.sql
+    ├── V4__remove_duplicated_user_email.sql
+    └── V5__add_user_roles_and_cleanup_redundant_constraint.sql
 ```
 
 ## Advertencias conocidas
 
 - Spring puede mostrar un aviso si Config Server no está disponible en `localhost:8888`; la importación es opcional.
-- Flyway puede advertir que la versión utilizada no ha sido probada oficialmente con PostgreSQL 18.
-- Las advertencias de dependencias opcionales de Oracle/OpenNLP no impiden el build cuando las clases no son requeridas por el flujo ejecutado.
+- Flyway puede advertir que la versión utilizada no ha sido probada oficialmente con versiones muy recientes de PostgreSQL.

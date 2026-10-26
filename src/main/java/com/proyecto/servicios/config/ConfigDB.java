@@ -27,7 +27,6 @@ import java.util.Map;
 @EnableTransactionManagement
 @EnableJpaRepositories(
         basePackages = {
-                "com.proyecto.servicios.repositorys.sf",
                 "com.proyecto.servicios.repositorys.gestopago",
                 "com.proyecto.servicios.repositorys.onboarding"
         },
@@ -54,20 +53,19 @@ public class ConfigDB {
             config.setPoolName("sfDatasource");
 
         }catch (Exception e){
-            log.error("Ha ocurrido un error en la conexcion a base de datos, a causa de:",e);
-            return null;
+            log.error("Ha ocurrido un error en la conexión a la base de datos, a causa de:", e);
+            throw new IllegalStateException("Error al inicializar sfDatasource", e);
         }
         return new HikariDataSource(config);
     }
 
     @Bean(name="sfEntityManagerFactory")
     @DependsOn("flyway")
-    public LocalContainerEntityManagerFactoryBean sfEntityManagerFactory(){
+    public LocalContainerEntityManagerFactoryBean sfEntityManagerFactory(@Qualifier("sfDatasource") DataSource dataSource){
         LocalContainerEntityManagerFactoryBean em= new LocalContainerEntityManagerFactoryBean();
         try{
-          em.setDataSource(sfDatasource());
+          em.setDataSource(dataSource);
           em.setPackagesToScan(
-                  "com.proyecto.servicios.entity.sf",
                   "com.proyecto.servicios.entity.gestopago",
                   "com.proyecto.servicios.entity.onboarding"
           );

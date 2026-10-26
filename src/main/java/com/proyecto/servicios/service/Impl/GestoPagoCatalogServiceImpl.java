@@ -78,13 +78,13 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
             }
 
             List<GestoPagoCatalogProduct> productos = mapXmlToEntity(items);
-            int sizeActual = catalogRepository.findAll().size();
+            long sizeActual = catalogRepository.count();
 
             if (productos.size() < sizeActual) {
                 log.warn("El tamaño del catálogo externo es menor al existente en BD. Se registrará la alerta y se actualizará la información.");
             }
 
-            catalogRepository.deleteAll();
+            catalogRepository.deleteAllInBatch();
             catalogRepository.saveAll(productos);
 
             // Sincronizar inmediatamente en Redis para mantener los datos al día

@@ -75,7 +75,7 @@ class GestoPagoProductServiceImplTest {
     }
 
     @Test
-        void debeTraducirTimeout() {
+    void debeTraducirTimeout() {
         Request request = Request.create(Request.HttpMethod.GET, "/sistema/service/getProductList.do",
             Map.of(), null, StandardCharsets.UTF_8, null);
         when(productsClient.getProductListXml(anyString(), anyString(), anyString())).thenThrow(new RetryableException(
@@ -85,5 +85,56 @@ class GestoPagoProductServiceImplTest {
             GestoPagoIntegrationException.class, () -> productService.obtenerProductos());
 
         assertEquals(504, actual.getStatus().value());
+    }
+
+    @Test
+    void debeMapearTodosLosCamposDetalladosDelXmlDeGestoPago() {
+        GestoPagoProductXmlResponse xmlResponse = new GestoPagoProductXmlResponse();
+        GestoPagoProductXmlResponse.GestoPagoMensajeXml mensaje = new GestoPagoProductXmlResponse.GestoPagoMensajeXml();
+        mensaje.setCodigo("01");
+        mensaje.setTexto("Operacion realizada con exito");
+        xmlResponse.setMensaje(mensaje);
+
+        GestoPagoProductXmlResponse.GestoPagoProductosXml productosXml = new GestoPagoProductXmlResponse.GestoPagoProductosXml();
+        com.proyecto.servicios.model.gestopago.GestoPagoProductXmlItem item = new com.proyecto.servicios.model.gestopago.GestoPagoProductXmlItem();
+        item.setServicio("AGUAKAN (Cancun)");
+        item.setProducto("Agua Cancun (Mun. de Benito Juarez y de Isla Mujeres)");
+        item.setIdServicio("56");
+        item.setIdProducto("185");
+        item.setIdCatTipoServicio("15");
+        item.setTipoFront("2");
+        item.setHasDigitoVerificador(false);
+        item.setPrecio(new java.math.BigDecimal("10.0"));
+        item.setShowAyuda(false);
+        item.setTipoReferencia("c");
+        item.setLegend("Para cualquier duda o aclaracion con tu pago...");
+        productosXml.setProductos(java.util.List.of(item));
+        xmlResponse.setProductos(productosXml);
+
+        when(productsClient.getProductListXml(anyString(), anyString(), anyString())).thenReturn(xmlResponse);
+
+        GestoPagoProductListResponse actual = productService.obtenerProductos();
+
+        assertNotNull(actual);
+        assertEquals(1, actual.getCode());
+        assertEquals("Operacion realizada con exito", actual.getMessage());
+        assertNotNull(actual.getData());
+        assertEquals(1, actual.getData().size());
+
+        com.fasterxml.jackson.databind.JsonNode productoJson = actual.getData().get(0);
+        assertEquals("AGUAKAN (Cancun)", productoJson.get("servicio").asText());
+        assertEquals("Agua Cancun (Mun. de Benito Juarez y de Isla Mujeres)", productoJson.get("producto").asText());
+        assertEquals("56", productoJson.get("idServicio").asText());
+        assertEquals("185", productoJson.get("idProducto").asText());
+        assertEquals("15", productoJson.get("idCatTipoServicio").asText());
+        assertEquals("2", productoJson.get("tipoFront").asText());
+        org.junit.jupiter.api.Assertions.assertFalse(productoJson.get("hasDigitoVerificador").asBoolean());
+        assertEquals("c", productoJson.get("tipoReferencia").asText());
+        assertEquals(10.0, productoJson.get("precio").asDouble());
+        org.junit.jupiter.api.Assertions.assertFalse(productoJson.get("showAyuda").asBoolean());
+        assertEquals("Para cualquier duda o aclaracion con tu pago...", productoJson.get("legend").asText());
+        assertEquals("185", productoJson.get("id").asText());
+        assertEquals("Agua Cancun (Mun. de Benito Juarez y de Isla Mujeres)", productoJson.get("name").asText());
+        org.junit.jupiter.api.Assertions.assertTrue(productoJson.get("active").asBoolean());
     }
 }
