@@ -2,6 +2,7 @@ package com.proyecto.servicios.model.gestopago;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -53,5 +54,9 @@ public class TransaccionGestoPagoRequest {
 
     @Schema(description = "Si es true, simula la aprobación de GestoPago para pruebas locales sin depender de lista blanca de IP", example = "false")
     private Boolean simular;
+
+    @Pattern(regexp = "^[0-9]{6}$", message = "El código 2FA debe ser de 6 dígitos numéricos")
+    @Schema(description = "Código OTP de 6 dígitos de segundo factor (2FA) para autorizar la operación", example = "482910")
+    private String codigo2FA;
 }
 

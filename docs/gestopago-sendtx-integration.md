@@ -175,3 +175,20 @@ Para evitar condiciones de carrera (*race conditions* / doble gasto) ante solici
   - `IllegalArgumentException` $\rightarrow$ `400 Bad Request` para reglas de negocio (saldo insuficiente, cuenta inactiva).
   - `DataIntegrityViolationException` $\rightarrow$ `409 Conflict` para violaciones de unicidad.
   - `GestoPagoIntegrationException` $\rightarrow$ Código HTTP contextualizado (502/504) protegiendo los detalles internos del proveedor.
+
+---
+
+## Verificación de Segundo Factor (2FA con OTP Temporal)
+
+Se implementó el mecanismo de **Doble Factor de Autenticación (2FA)** conforme a las mejores prácticas de la banca digital y estándares de seguridad NIST:
+
+### Flujo de Operación:
+1. **Generación del Código (`POST /api/seguridad/2fa/solicitar`):**
+   - El cliente envía su `numeroCuenta`.
+   - Se valida que la cuenta esté `ACTIVA`.
+   - Se genera un código OTP criptográficamente seguro de 6 dígitos numéricos (`SecureRandom`).
+   - Se almacena en **Redis** con expiración estricta de **5 minutos** (TTL = 300 segundos) y respaldo en memoria.
+2. **Autorización en la Transacción (`POST /api/gestopago/transacciones/...`):**
+   - El cliente envía el campo `"codigo2FA": "123456"` en el payload.
+   - Si el código es incorrecto o expiró $\rightarrow$ Retorna `400 Bad Request`.
+   - Si el código es válido $\rightarrow$ Se valida y se **consume inmediatamente (eliminándolo de Redis)** para impedir ataques de repetición (*Replay Attacks*).

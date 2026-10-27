@@ -13,6 +13,7 @@ import com.proyecto.servicios.repositorys.onboarding.CuentaRepository;
 import com.proyecto.servicios.service.GestoPagoCryptoService;
 import com.proyecto.servicios.service.GestoPagoTokenService;
 import com.proyecto.servicios.service.GestoPagoTransactionService;
+import com.proyecto.servicios.service.seguridad.TwoFactorAuthService;
 import feign.FeignException;
 import feign.RetryableException;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
     private final GestoPagoCatalogProductRepository catalogProductRepository;
     private final GestoPagoTransaccionRepository transaccionRepository;
     private final CuentaRepository cuentaRepository;
+    private final TwoFactorAuthService twoFactorAuthService;
     private final ObjectMapper objectMapper;
 
     private final Integer idDistribuidor;
@@ -50,6 +52,39 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
     private final String apiKey;
     private final String defaultUnidad;
     private final boolean mockModeGlobal;
+    private final boolean twoFactorRequired;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public GestoPagoTransactionServiceImpl(
+            GestoPagoTransactionClient transactionClient,
+            GestoPagoTokenService tokenService,
+            GestoPagoCryptoService cryptoService,
+            GestoPagoCatalogProductRepository catalogProductRepository,
+            GestoPagoTransaccionRepository transaccionRepository,
+            CuentaRepository cuentaRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) TwoFactorAuthService twoFactorAuthService,
+            ObjectMapper objectMapper,
+            @Value("${gestopago.auth.id-distribuidor}") Integer idDistribuidor,
+            @Value("${gestopago.auth.codigo-dispositivo}") String codigoDispositivo,
+            @Value("${gestopago.auth.api-key}") String apiKey,
+            @Value("${gestopago.unidad:083}") String defaultUnidad,
+            @Value("${gestopago.mock-mode:false}") boolean mockModeGlobal,
+            @Value("${gestopago.security.2fa.required:false}") boolean twoFactorRequired) {
+        this.transactionClient = transactionClient;
+        this.tokenService = tokenService;
+        this.cryptoService = cryptoService;
+        this.catalogProductRepository = catalogProductRepository;
+        this.transaccionRepository = transaccionRepository;
+        this.cuentaRepository = cuentaRepository;
+        this.twoFactorAuthService = twoFactorAuthService;
+        this.objectMapper = objectMapper;
+        this.idDistribuidor = idDistribuidor;
+        this.codigoDispositivo = codigoDispositivo;
+        this.apiKey = apiKey;
+        this.defaultUnidad = defaultUnidad;
+        this.mockModeGlobal = mockModeGlobal;
+        this.twoFactorRequired = twoFactorRequired;
+    }
 
     public GestoPagoTransactionServiceImpl(
             GestoPagoTransactionClient transactionClient,
@@ -59,23 +94,14 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             GestoPagoTransaccionRepository transaccionRepository,
             CuentaRepository cuentaRepository,
             ObjectMapper objectMapper,
-            @Value("${gestopago.auth.id-distribuidor}") Integer idDistribuidor,
-            @Value("${gestopago.auth.codigo-dispositivo}") String codigoDispositivo,
-            @Value("${gestopago.auth.api-key}") String apiKey,
-            @Value("${gestopago.unidad:083}") String defaultUnidad,
-            @Value("${gestopago.mock-mode:false}") boolean mockModeGlobal) {
-        this.transactionClient = transactionClient;
-        this.tokenService = tokenService;
-        this.cryptoService = cryptoService;
-        this.catalogProductRepository = catalogProductRepository;
-        this.transaccionRepository = transaccionRepository;
-        this.cuentaRepository = cuentaRepository;
-        this.objectMapper = objectMapper;
-        this.idDistribuidor = idDistribuidor;
-        this.codigoDispositivo = codigoDispositivo;
-        this.apiKey = apiKey;
-        this.defaultUnidad = defaultUnidad;
-        this.mockModeGlobal = mockModeGlobal;
+            Integer idDistribuidor,
+            String codigoDispositivo,
+            String apiKey,
+            String defaultUnidad,
+            boolean mockModeGlobal) {
+        this(transactionClient, tokenService, cryptoService, catalogProductRepository,
+                transaccionRepository, cuentaRepository, null, objectMapper,
+                idDistribuidor, codigoDispositivo, apiKey, defaultUnidad, mockModeGlobal, false);
     }
 
     @Override
@@ -98,6 +124,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
 
         // 2. Validación de saldo en cuenta si se especificó numeroCuenta
         Cuenta cuentaADebitar = validarYObtenerCuenta(request.getNumeroCuenta(), montoTransaccion);
+        validarSegundoFactorSiAplica(cuentaADebitar, request.getCodigo2FA());
 
         // 3. Preparación y validación de parámetros de la recarga (tipoFront = 1)
         String upc = sanitizarOGenerarUpc(request.getUpc());
@@ -132,6 +159,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
 
         // 2. Validación de saldo en cuenta si se especificó numeroCuenta
         Cuenta cuentaADebitar = validarYObtenerCuenta(request.getNumeroCuenta(), request.getMontoPago());
+        validarSegundoFactorSiAplica(cuentaADebitar, request.getCodigo2FA());
 
         // 3. Preparación y validación de parámetros (tipoFront = 2 o gift card)
         String upc = sanitizarOGenerarUpc(request.getUpc());
@@ -184,6 +212,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                     .unidad(request.getUnidad())
                     .numeroCuenta(request.getNumeroCuenta())
                     .simular(request.getSimular())
+                    .codigo2FA(request.getCodigo2FA())
                     .build();
             return procesarPagoServicio(servicioReq);
         } else {
@@ -199,6 +228,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                     .unidad(request.getUnidad())
                     .numeroCuenta(request.getNumeroCuenta())
                     .simular(request.getSimular())
+                    .codigo2FA(request.getCodigo2FA())
                     .build();
             return procesarRecarga(recargaReq);
         }
@@ -360,6 +390,20 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         log.info("Cuenta {} validada con saldo suficiente: ${} (Monto requerido: ${})",
                 numeroCuenta, saldoActual, montoRequerido);
         return cuenta;
+    }
+
+    private void validarSegundoFactorSiAplica(Cuenta cuenta, String codigo2FA) {
+        if (cuenta == null || twoFactorAuthService == null) {
+            return;
+        }
+        if (twoFactorRequired && (codigo2FA == null || codigo2FA.isBlank())) {
+            throw new IllegalArgumentException(
+                    "El código de verificación 2FA de 6 dígitos es obligatorio para autorizar transacciones de la cuenta " +
+                            cuenta.getNumeroCuenta());
+        }
+        if (codigo2FA != null && !codigo2FA.isBlank()) {
+            twoFactorAuthService.validarYConsumirCodigo(cuenta.getNumeroCuenta(), codigo2FA);
+        }
     }
 
     private GestoPagoSendTxXmlResponse generarMockResponse(
