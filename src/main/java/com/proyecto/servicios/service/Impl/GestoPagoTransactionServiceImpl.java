@@ -342,7 +342,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         if (numeroCuenta == null || numeroCuenta.isBlank()) {
             return null;
         }
-        Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta.trim())
+        Cuenta cuenta = cuentaRepository.findByNumeroCuentaForUpdate(numeroCuenta.trim())
                 .orElseThrow(() -> new IllegalArgumentException("La cuenta " + numeroCuenta + " no existe"));
 
         if (!"ACTIVA".equalsIgnoreCase(cuenta.getEstatus())) {

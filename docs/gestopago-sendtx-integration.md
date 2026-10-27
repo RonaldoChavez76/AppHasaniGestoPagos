@@ -144,3 +144,34 @@ Valores configurables en `application.properties` / `.env`:
 - `gestopago.crypto.iv`: Vector de inicialización de 16 bytes en Base64.
 - `gestopago.unidad`: Código de sucursal comercial (por defecto `083`).
 - Timeout de lectura de 62 segundos para soportar la respuesta de los operadores telefónicos.
+
+---
+
+## Estrategia Financiera, Concurrencia y Manejo de Timeouts
+
+### 1. Control de Concurrencia (Bloqueo Pesimista)
+Para evitar condiciones de carrera (*race conditions* / doble gasto) ante solicitudes simultáneas sobre la misma cuenta bancaria:
+- Se utiliza `@Lock(LockModeType.PESSIMISTIC_WRITE)` en `CuentaRepository.findByNumeroCuentaForUpdate()`.
+- Esto genera un bloqueo a nivel de fila en PostgreSQL (`SELECT ... FOR UPDATE`), garantizando que si dos transacciones concurrentes intentan debitar de la misma cuenta, la segunda esperará hasta que la primera finalice su commit, impidiendo saldos negativos.
+
+### 2. Estrategia de Aplicación de Saldo en Dos Fases
+1. **Fase 1: Validación y Verificación Previa:**
+   - Se valida que la cuenta exista y se encuentre con estatus `ACTIVA`.
+   - Se valida que `saldo >= montoRequerido`. Si no hay saldo suficiente, se aborta inmediatamente con `400 Bad Request` antes de contactar a GestoPago.
+2. **Fase 2: Ejecución Externa:**
+   - Se envía la petición cifrada a GestoPago.
+3. **Fase 3: Liquidación Condicional:**
+   - **Éxito (`CODIGO 01`):** Se debita el saldo de la cuenta atómicamente y se persiste la transacción en `gestopago_transacciones`.
+   - **Rechazo del Proveedor (ej. Código 55, 06, etc.):** El saldo del cliente **permanece intacto y no se descuenta**.
+   - **Timeout (Código 82 o SocketTimeoutException):** **NO** se asume que falló ni se descuenta a ciegas. La transacción se marca con estado `TIMEOUT` y se registra el UPC para conciliación posterior mediante la consulta o auditoría con el proveedor.
+
+### 3. Seguridad de Credenciales
+- El token JWT y las claves API (`GESTOPAGO_AUTH_PASSWORD`, `GESTOPAGO_API_KEY`, etc.) se inyectan a través de variables de entorno y archivos `.env` (excluidos del control de versiones mediante `.gitignore`).
+- Las respuestas HTTP y los registros de log enmascaran u omiten cualquier secreto o payload cifrado sensible.
+
+### 4. Manejo Centralizado de Excepciones (`@RestControllerAdvice`)
+- `GlobalExceptionHandler` captura:
+  - `MethodArgumentNotValidException` $\rightarrow$ `400 Bad Request` con detalle de campos no válidos.
+  - `IllegalArgumentException` $\rightarrow$ `400 Bad Request` para reglas de negocio (saldo insuficiente, cuenta inactiva).
+  - `DataIntegrityViolationException` $\rightarrow$ `409 Conflict` para violaciones de unicidad.
+  - `GestoPagoIntegrationException` $\rightarrow$ Código HTTP contextualizado (502/504) protegiendo los detalles internos del proveedor.

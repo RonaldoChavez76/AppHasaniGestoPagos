@@ -147,7 +147,7 @@ class GestoPagoTransactionServiceImplTest {
         cuenta.setSaldo(new BigDecimal("5000.00"));
         cuenta.setEstatus("ACTIVA");
 
-        when(cuentaRepository.findByNumeroCuenta("8766090787749132")).thenReturn(Optional.of(cuenta));
+        when(cuentaRepository.findByNumeroCuentaForUpdate("8766090787749132")).thenReturn(Optional.of(cuenta));
 
         RecargaTelefonicaRequest request = RecargaTelefonicaRequest.builder()
                 .idProducto(582)
@@ -178,7 +178,7 @@ class GestoPagoTransactionServiceImplTest {
         cuenta.setSaldo(new BigDecimal("5.00")); // Saldo de 5 pesos
         cuenta.setEstatus("ACTIVA");
 
-        when(cuentaRepository.findByNumeroCuenta("8766090787749132")).thenReturn(Optional.of(cuenta));
+        when(cuentaRepository.findByNumeroCuentaForUpdate("8766090787749132")).thenReturn(Optional.of(cuenta));
 
         RecargaTelefonicaRequest request = RecargaTelefonicaRequest.builder()
                 .idProducto(582)
