@@ -1,22 +1,24 @@
 package com.proyecto.servicios.service.Impl;
 
 import com.proyecto.servicios.entity.onboarding.Cuenta;
+import com.proyecto.servicios.entity.seguridad.DosFactorOtp;
 import com.proyecto.servicios.model.seguridad.Solicitud2faRequest;
 import com.proyecto.servicios.model.seguridad.TwoFactorOtpResponse;
 import com.proyecto.servicios.repositorys.onboarding.CuentaRepository;
+import com.proyecto.servicios.repositorys.seguridad.DosFactorOtpRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
-import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -27,7 +29,10 @@ class TwoFactorAuthServiceImplTest {
     private CuentaRepository cuentaRepository;
 
     @Mock
-    private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+    private DosFactorOtpRepository otpRepository;
+
+    @Mock
+    private StringRedisTemplate redisTemplate;
 
     @Mock
     private ValueOperations<String, String> valueOperations;
@@ -37,7 +42,7 @@ class TwoFactorAuthServiceImplTest {
     @BeforeEach
     void setUp() {
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        twoFactorService = new TwoFactorAuthServiceImpl(cuentaRepository, redisTemplate);
+        twoFactorService = new TwoFactorAuthServiceImpl(cuentaRepository, otpRepository, redisTemplate);
     }
 
     @Test
@@ -62,7 +67,7 @@ class TwoFactorAuthServiceImplTest {
         assertEquals(6, response.getCodigoOtp().length());
         assertTrue(response.getCodigoOtp().matches("^[0-9]{6}$"));
 
-        verify(valueOperations).set(eq("2fa:otp:8766090787749132"), eq(response.getCodigoOtp()), any(Duration.class));
+        verify(otpRepository).save(any(DosFactorOtp.class));
     }
 
     @Test
@@ -98,28 +103,33 @@ class TwoFactorAuthServiceImplTest {
     }
 
     @Test
-    void debeValidarYConsumirCodigoExitosamente() {
-        when(valueOperations.get("2fa:otp:8766090787749132")).thenReturn("654321");
+    void debeValidarYConsumirCodigoExitosamenteEnPostgres() {
+        DosFactorOtp otp = new DosFactorOtp("8766090787749132", "654321", LocalDateTime.now().plusMinutes(5));
+        when(otpRepository.findTopVigentePorCuenta("8766090787749132")).thenReturn(Optional.of(otp));
 
         assertDoesNotThrow(() -> twoFactorService.validarYConsumirCodigo("8766090787749132", "654321"));
 
+        assertTrue(otp.isConsumido());
+        verify(otpRepository).save(otp);
         verify(redisTemplate).delete("2fa:otp:8766090787749132");
     }
 
     @Test
     void debeRechazarCodigoSiEsIncorrecto() {
-        when(valueOperations.get("2fa:otp:8766090787749132")).thenReturn("654321");
+        DosFactorOtp otp = new DosFactorOtp("8766090787749132", "654321", LocalDateTime.now().plusMinutes(5));
+        when(otpRepository.findTopVigentePorCuenta("8766090787749132")).thenReturn(Optional.of(otp));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> twoFactorService.validarYConsumirCodigo("8766090787749132", "111111"));
 
         assertTrue(ex.getMessage().contains("Código 2FA incorrecto"));
-        verify(redisTemplate, never()).delete(anyString());
+        assertFalse(otp.isConsumido());
+        verify(otpRepository, never()).save(otp);
     }
 
     @Test
     void debeRechazarCodigoSiExpiroONoExiste() {
-        when(valueOperations.get("2fa:otp:8766090787749132")).thenReturn(null);
+        when(otpRepository.findTopVigentePorCuenta("8766090787749132")).thenReturn(Optional.empty());
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> twoFactorService.validarYConsumirCodigo("8766090787749132", "654321"));

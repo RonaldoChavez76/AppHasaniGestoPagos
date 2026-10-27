@@ -1,19 +1,22 @@
 package com.proyecto.servicios.service.Impl;
 
 import com.proyecto.servicios.entity.onboarding.Cuenta;
+import com.proyecto.servicios.entity.seguridad.DosFactorOtp;
 import com.proyecto.servicios.model.seguridad.Solicitud2faRequest;
 import com.proyecto.servicios.model.seguridad.TwoFactorOtpResponse;
 import com.proyecto.servicios.repositorys.onboarding.CuentaRepository;
+import com.proyecto.servicios.repositorys.seguridad.DosFactorOtpRepository;
 import com.proyecto.servicios.service.seguridad.TwoFactorAuthService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
 
 @Service
 @Slf4j
@@ -24,24 +27,25 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
     private static final long EXPIRACION_SEGUNDOS = 300;
 
     private final CuentaRepository cuentaRepository;
+    private final DosFactorOtpRepository otpRepository;
     private final StringRedisTemplate redisTemplate;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    // Mecanismo de respaldo (fallback) en memoria por si Redis presenta latencia o caída
-    private final Map<String, OtpCacheItem> fallbackCache = new ConcurrentHashMap<>();
-
     public TwoFactorAuthServiceImpl(
             CuentaRepository cuentaRepository,
-            StringRedisTemplate redisTemplate) {
+            DosFactorOtpRepository otpRepository,
+            @Autowired(required = false) StringRedisTemplate redisTemplate) {
         this.cuentaRepository = cuentaRepository;
+        this.otpRepository = otpRepository;
         this.redisTemplate = redisTemplate;
     }
 
     @Override
+    @Transactional
     public TwoFactorOtpResponse solicitarCodigo(Solicitud2faRequest request) {
         String numeroCuenta = request.getNumeroCuenta().trim();
 
-        // 1. Validar que la cuenta exista y se encuentre activa
+        // 1. Validar que la cuenta exista y se encuentre activa en PostgreSQL
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta)
                 .orElseThrow(() -> new IllegalArgumentException("La cuenta " + numeroCuenta + " no existe"));
 
@@ -52,20 +56,23 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
         // 2. Generar código criptográficamente seguro de 6 dígitos numéricos (100000 - 999999)
         int codigoNumerico = 100000 + secureRandom.nextInt(900000);
         String codigoOtp = String.valueOf(codigoNumerico);
-        String redisKey = REDIS_PREFIX + numeroCuenta;
-
-        // 3. Persistir en Redis con tiempo de vida (TTL) de 5 minutos
-        try {
-            redisTemplate.opsForValue().set(redisKey, codigoOtp, OTP_TTL);
-            log.info("Código OTP 2FA generado y guardado en Redis para cuenta: {} (expira en {} min)",
-                    numeroCuenta, OTP_TTL.toMinutes());
-        } catch (Exception e) {
-            log.warn("No se pudo escribir en Redis. Utilizando caché en memoria como fallback: {}", e.getMessage());
-        }
-
-        // Respaldo en memoria
         LocalDateTime expiracion = LocalDateTime.now().plus(OTP_TTL);
-        fallbackCache.put(numeroCuenta, new OtpCacheItem(codigoOtp, expiracion));
+
+        // 3. Persistir en PostgreSQL (Garantiza funcionamiento en Producción sin Redis)
+        DosFactorOtp otpEntidad = new DosFactorOtp(numeroCuenta, codigoOtp, expiracion);
+        otpRepository.save(otpEntidad);
+        log.info("Código OTP 2FA persistido en PostgreSQL para cuenta: {}", numeroCuenta);
+
+        // 4. Si Redis está disponible, almacenar como acelerador de lectura con TTL
+        if (redisTemplate != null) {
+            try {
+                String redisKey = REDIS_PREFIX + numeroCuenta;
+                redisTemplate.opsForValue().set(redisKey, codigoOtp, OTP_TTL);
+                log.info("Código OTP 2FA cacheado en Redis para cuenta: {} (TTL {} min)", numeroCuenta, OTP_TTL.toMinutes());
+            } catch (Exception e) {
+                log.warn("Redis no disponible en este entorno, operando únicamente con PostgreSQL: {}", e.getMessage());
+            }
+        }
 
         log.info("=== [2FA BANCARIO] CÓDIGO GENERADO PARA CUENTA {} ===> {} ===", numeroCuenta, codigoOtp);
 
@@ -79,6 +86,7 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
     }
 
     @Override
+    @Transactional
     public void validarYConsumirCodigo(String numeroCuenta, String codigo) {
         if (codigo == null || codigo.isBlank()) {
             throw new IllegalArgumentException("El código 2FA de 6 dígitos es obligatorio para autorizar la operación");
@@ -86,48 +94,35 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
 
         String codigoLimpio = codigo.trim();
         String cuentaLimpia = numeroCuenta.trim();
-        String redisKey = REDIS_PREFIX + cuentaLimpia;
-        String codigoEsperado = null;
 
-        // 1. Intentar recuperar desde Redis
-        try {
-            Object valor = redisTemplate.opsForValue().get(redisKey);
-            if (valor != null) {
-                codigoEsperado = valor.toString();
-            }
-        } catch (Exception e) {
-            log.warn("Error consultando Redis para validar 2FA: {}", e.getMessage());
-        }
+        // 1. Buscar el último código activo no consumido en PostgreSQL
+        Optional<DosFactorOtp> otpOpt = otpRepository.findTopVigentePorCuenta(cuentaLimpia);
 
-        // 2. Si no se encontró en Redis, consultar caché de respaldo
-        if (codigoEsperado == null) {
-            OtpCacheItem item = fallbackCache.get(cuentaLimpia);
-            if (item != null && item.expiracion().isAfter(LocalDateTime.now())) {
-                codigoEsperado = item.codigo();
-            }
-        }
-
-        // 3. Verificar si el código existe y no ha expirado
-        if (codigoEsperado == null) {
+        if (otpOpt.isEmpty() || otpOpt.get().getExpiraEn().isBefore(LocalDateTime.now())) {
             throw new IllegalArgumentException(
                     "El código 2FA ha expirado o no ha sido solicitado para la cuenta " + cuentaLimpia +
                             ". Por favor solicita un nuevo código de verificación.");
         }
 
-        // 4. Comparar el código
-        if (!codigoEsperado.equals(codigoLimpio)) {
+        DosFactorOtp otp = otpOpt.get();
+
+        // 2. Validar que el código coincida
+        if (!otp.getCodigoOtp().equals(codigoLimpio)) {
             throw new IllegalArgumentException("Código 2FA incorrecto. Verifica el código e intenta nuevamente.");
         }
 
-        // 5. Consumir (eliminar) inmediatamente para garantizar que sea de un solo uso (One-Time Password)
-        try {
-            redisTemplate.delete(redisKey);
-        } catch (Exception ignored) {
+        // 3. Marcar como consumido en PostgreSQL (One-Time Password)
+        otp.setConsumido(true);
+        otpRepository.save(otp);
+
+        // 4. Limpiar en Redis si está disponible
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.delete(REDIS_PREFIX + cuentaLimpia);
+            } catch (Exception ignored) {
+            }
         }
-        fallbackCache.remove(cuentaLimpia);
 
-        log.info("Código 2FA validado y consumido con éxito para la cuenta: {}", cuentaLimpia);
+        log.info("Código 2FA validado y consumido con éxito en PostgreSQL para la cuenta: {}", cuentaLimpia);
     }
-
-    private record OtpCacheItem(String codigo, LocalDateTime expiracion) {}
 }
