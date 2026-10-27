@@ -5,9 +5,11 @@ import com.proyecto.servicios.client.GestoPagoTransactionClient;
 import com.proyecto.servicios.entity.gestopago.GestoPagoCatalogProduct;
 import com.proyecto.servicios.entity.gestopago.GestoPagoToken;
 import com.proyecto.servicios.entity.gestopago.GestoPagoTransaccion;
+import com.proyecto.servicios.entity.onboarding.Cuenta;
 import com.proyecto.servicios.model.gestopago.*;
 import com.proyecto.servicios.repositorys.gestopago.GestoPagoCatalogProductRepository;
 import com.proyecto.servicios.repositorys.gestopago.GestoPagoTransaccionRepository;
+import com.proyecto.servicios.repositorys.onboarding.CuentaRepository;
 import com.proyecto.servicios.service.GestoPagoCryptoService;
 import com.proyecto.servicios.service.GestoPagoTokenService;
 import feign.Request;
@@ -24,7 +26,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Date;
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -49,6 +50,9 @@ class GestoPagoTransactionServiceImplTest {
     @Mock
     private GestoPagoTransaccionRepository transaccionRepository;
 
+    @Mock
+    private CuentaRepository cuentaRepository;
+
     private GestoPagoTransactionServiceImpl transactionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -59,7 +63,6 @@ class GestoPagoTransactionServiceImplTest {
         lenient().when(tokenService.obtenerTokenActivo(83, "GPS83-TPV-17")).thenReturn(Optional.of(token));
         lenient().when(cryptoService.encrypt(anyString())).thenReturn("mocked-encrypted-payload");
 
-        // Simular que cualquier guardado en base de datos retorna la misma entidad
         lenient().when(transaccionRepository.save(any(GestoPagoTransaccion.class)))
                 .thenAnswer(invocation -> {
                     GestoPagoTransaccion entidad = invocation.getArgument(0);
@@ -74,11 +77,13 @@ class GestoPagoTransactionServiceImplTest {
                 cryptoService,
                 catalogProductRepository,
                 transaccionRepository,
+                cuentaRepository,
                 objectMapper,
                 83,
                 "GPS83-TPV-17",
                 "test-api-key",
-                "083"
+                "083",
+                false
         );
     }
 
@@ -135,6 +140,63 @@ class GestoPagoTransactionServiceImplTest {
     }
 
     @Test
+    void debeValidarYDescontarSaldoDeCuentaAlSerExitosa() {
+        Cuenta cuenta = new Cuenta();
+        cuenta.setId(3L);
+        cuenta.setNumeroCuenta("8766090787749132");
+        cuenta.setSaldo(new BigDecimal("5000.00"));
+        cuenta.setEstatus("ACTIVA");
+
+        when(cuentaRepository.findByNumeroCuenta("8766090787749132")).thenReturn(Optional.of(cuenta));
+
+        RecargaTelefonicaRequest request = RecargaTelefonicaRequest.builder()
+                .idProducto(582)
+                .idServicio(133)
+                .telefono("5512345678")
+                .monto(new BigDecimal("10.00"))
+                .numeroCuenta("8766090787749132")
+                .simular(true)
+                .build();
+
+        GestoPagoTransaccionResponse response = transactionService.procesarRecarga(request);
+
+        assertNotNull(response);
+        assertTrue(response.isExitoso());
+        assertEquals(EstadoTransaccion.EXITOSA, response.getEstado());
+        assertEquals("8766090787749132", response.getNumeroCuenta());
+        assertEquals(new BigDecimal("4990.00"), response.getNuevoSaldoCuenta());
+        assertEquals(new BigDecimal("4990.00"), cuenta.getSaldo());
+
+        verify(cuentaRepository).save(cuenta);
+    }
+
+    @Test
+    void debeRechazarTransaccionSiSaldoEnCuentaEsInsuficiente() {
+        Cuenta cuenta = new Cuenta();
+        cuenta.setId(3L);
+        cuenta.setNumeroCuenta("8766090787749132");
+        cuenta.setSaldo(new BigDecimal("5.00")); // Saldo de 5 pesos
+        cuenta.setEstatus("ACTIVA");
+
+        when(cuentaRepository.findByNumeroCuenta("8766090787749132")).thenReturn(Optional.of(cuenta));
+
+        RecargaTelefonicaRequest request = RecargaTelefonicaRequest.builder()
+                .idProducto(582)
+                .idServicio(133)
+                .telefono("5512345678")
+                .monto(new BigDecimal("10.00")) // Requiere 10 pesos
+                .numeroCuenta("8766090787749132")
+                .build();
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                transactionService.procesarRecarga(request));
+
+        assertTrue(ex.getMessage().contains("Saldo insuficiente"));
+        verifyNoInteractions(transactionClient);
+        verify(cuentaRepository, never()).save(any());
+    }
+
+    @Test
     void debeProcesarPagoServicioExitosamente() {
         PagoServicioRequest request = PagoServicioRequest.builder()
                 .idProducto(205)
@@ -175,7 +237,7 @@ class GestoPagoTransactionServiceImplTest {
         ArgumentCaptor<GestoPagoTransaccion> captor = ArgumentCaptor.forClass(GestoPagoTransaccion.class);
         verify(transaccionRepository).save(captor.capture());
         GestoPagoTransaccion saved = captor.getValue();
-        assertEquals("1111111111", saved.getTelefono()); // Fijo para pago de servicios
+        assertEquals("1111111111", saved.getTelefono());
         assertEquals("25720381", saved.getReferencia());
         assertEquals("PAGO_SERVICIO", saved.getTipoOperacion());
     }

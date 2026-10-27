@@ -87,6 +87,6 @@ public class GestoPagoSendTxXmlResponse {
     }
 
     public boolean esTimeout() {
-        return "82".equals(obtenerCodigo()) || "-1".equals(numAutorizacion);
+        return "82".equals(obtenerCodigo());
     }
 }

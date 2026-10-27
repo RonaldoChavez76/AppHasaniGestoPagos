@@ -21,8 +21,12 @@ public class GestoPagoTransaccion implements Serializable {
     @Column(name = "upc", nullable = false, unique = true, length = 64)
     private String upc;
 
+    @Column(name = "numero_cuenta", length = 20)
+    private String numeroCuenta;
+
     @Column(name = "tipo_operacion", nullable = false, length = 30)
     private String tipoOperacion;
+
 
     @Column(name = "id_producto", nullable = false)
     private Integer idProducto;

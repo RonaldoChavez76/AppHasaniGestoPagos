@@ -70,6 +70,13 @@ public class GestoPagoTransaccionResponse {
     @Schema(description = "Instrucciones de canje o términos de la transacción", example = "Conserve su ticket de compra.")
     private String legend;
 
+    @Schema(description = "Número de cuenta bancaria debitada (si aplica)", example = "8766090787749132")
+    private String numeroCuenta;
+
+    @Schema(description = "Nuevo saldo de la cuenta bancaria tras el débito (si aplica)", example = "4990.00")
+    private BigDecimal nuevoSaldoCuenta;
+
     @Schema(description = "Fecha y hora de registro local", example = "2026-10-26T15:00:00")
     private LocalDateTime fechaRegistro;
 }
+

@@ -35,13 +35,16 @@ Todos los endpoints están mapeados bajo `/api/gestopago/transacciones` y con al
 {
   "idProducto": 582,
   "idServicio": 133,
-  "telefono": "5555555551",
+  "telefono": "5512345678",
   "monto": 10.00,
-  "upc": "UPCREC12345",
-  "unidad": "083"
+  "numeroCuenta": "8766090787749132",
+  "simular": true
 }
 ```
-*Nota: Si `upc` se omite, el sistema autogenera un código único alfanumérico de 15 caracteres.*
+*Notas:*
+- `numeroCuenta`: Si se envía, valida que la cuenta exista, esté ACTIVA y tenga saldo suficiente (`saldo >= monto`). Si la transacción es exitosa con GestoPago o en simulación, debita automáticamente el saldo de PostgreSQL en la tabla `cuentas`.
+- `simular`: Si se envía en `true`, simula una aprobación exitosa de GestoPago para permitir pruebas locales sin depender de que tu IP pública esté en lista blanca.
+
 
 ### 2. Pago de Servicios (Endpoint Especializado)
 - **Ruta**: `POST /api/gestopago/transacciones/servicio`
