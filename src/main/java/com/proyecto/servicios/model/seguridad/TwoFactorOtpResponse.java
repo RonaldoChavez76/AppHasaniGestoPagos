@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @Schema(description = "Respuesta con la información del código OTP 2FA generado")
 public class TwoFactorOtpResponse {
 
-    @Schema(description = "Número de cuenta asociada", example = "8766090787749132")
+    @Schema(description = "Número de cuenta asociada", example = "4229215075268914")
     private String numeroCuenta;
 
     @Schema(description = "Mensaje informativo para el usuario", example = "Código de verificación OTP generado exitosamente. Válido por 5 minutos.")

@@ -37,7 +37,7 @@ Todos los endpoints están mapeados bajo `/api/gestopago/transacciones` y con al
   "idServicio": 133,
   "telefono": "5512345678",
   "monto": 10.00,
-  "numeroCuenta": "8766090787749132",
+  "numeroCuenta": "4229215075268914",
   "simular": true
 }
 ```
@@ -204,12 +204,20 @@ Para facilitar la evaluación de la solución completa, se dispone del usuario d
 - **Correo / Usuario:** `ana.lopez.prueba@example.com`
 - **Contraseña:** `Prueba2026!`
 - **Teléfono móvil:** `5512345678`
-- **Número de cuenta:** `8766090787749132`
+- **Número de cuenta:** `4229215075268914`
 - **Estatus:** `ACTIVA`
+
+> **Swagger UI disponible en:**
+> - **Despliegue en la Nube (Render):** `https://apphasanigestopagos.onrender.com/swagger-ui/index.html`
+> - **Entorno Local:** `http://localhost:8080/swagger-ui/index.html`
+
+> **Nota sobre el modo de simulación (`"simular": true` vs `"simular": false`):**
+> - `"simular": true` *(Recomendado para evaluación)*: Permite probar el flujo completo (autenticación JWT, validación de cuenta, 2FA en PostgreSQL, descuento atómico en `cuentas.saldo`, prevención de duplicados y registro en `gestopago_transacciones`) sin depender de que la IP pública del evaluador o de Render esté autorizada en el firewall de PuntoRed/GestoPago.
+> - `"simular": false`: Envía la petición cifrada real en AES-256-CBC con token Bearer a los servidores de GestoPago (`sendTx.do`). Si la IP de origen no está en la lista blanca de GestoPago, la pasarela responderá código `55` (*"IP Origen no válida"*), protegiendo íntegramente el saldo del cliente.
 
 ---
 
-### Flujo de Prueba Paso a Paso (Swagger UI en `http://localhost:8080/swagger-ui/index.html`):
+### Flujo de Prueba Paso a Paso:
 
 #### Paso 1: Autenticación del Cliente (Login)
 - **Endpoint:** `POST /auth/login`
@@ -227,7 +235,7 @@ Para facilitar la evaluación de la solución completa, se dispone del usuario d
 - **Cuerpo de Solicitud (JSON):**
 ```json
 {
-  "numeroCuenta": "8766090787749132"
+  "numeroCuenta": "4229215075268914"
 }
 ```
 *Respuesta:* Retorna un código OTP criptográfico de 6 dígitos con validez de 5 minutos, persistido en PostgreSQL en la tabla `seguridad_dos_factor_otp`.
@@ -243,7 +251,7 @@ Para facilitar la evaluación de la solución completa, se dispone del usuario d
   "idServicio": 133,
   "telefono": "5512345678",
   "monto": 10.00,
-  "numeroCuenta": "8766090787749132",
+  "numeroCuenta": "4229215075268914",
   "codigo2FA": "<codigo_otp_obtenido_en_paso_2>",
   "simular": true
 }
@@ -258,7 +266,7 @@ Para facilitar la evaluación de la solución completa, se dispone del usuario d
   "idServicio": 76,
   "referencia": "25720381",
   "montoPago": 150.00,
-  "numeroCuenta": "8766090787749132",
+  "numeroCuenta": "4229215075268914",
   "codigo2FA": "<codigo_otp_obtenido_en_paso_2>",
   "simular": true
 }

@@ -49,7 +49,7 @@ public class PagoServicioRequest {
     @Schema(description = "Sucursal o unidad comercial (opcional, por defecto el valor configurado)", example = "083")
     private String unidad;
 
-    @Schema(description = "Número de cuenta bancaria local para debitar el saldo (opcional)", example = "8766090787749132")
+    @Schema(description = "Número de cuenta bancaria local para debitar el saldo (opcional)", example = "4229215075268914")
     private String numeroCuenta;
 
     @Schema(description = "Si es true, simula la aprobación de GestoPago para pruebas locales sin depender de lista blanca de IP", example = "false")
