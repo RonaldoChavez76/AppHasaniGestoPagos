@@ -192,3 +192,83 @@ Se implementó el mecanismo de **Doble Factor de Autenticación (2FA)** conforme
    - El cliente envía el campo `"codigo2FA": "123456"` en el payload.
    - Si el código es incorrecto o expiró $\rightarrow$ Retorna `400 Bad Request`.
    - Si el código es válido $\rightarrow$ Se valida y se **consume inmediatamente (marcando `consumido = true` en PostgreSQL y purgando de Redis)** para impedir ataques de repetición (*Replay Attacks*).
+
+---
+
+## Guía de Pruebas de Extremo a Extremo (Usuario de Prueba)
+
+Para facilitar la evaluación de la solución completa, se dispone del usuario de prueba **Ana María López García** registrado en la base de datos PostgreSQL:
+
+### Datos de la Cuenta de Prueba:
+- **Cliente:** Ana María López García (`id = 3`)
+- **Correo / Usuario:** `ana.lopez.prueba@example.com`
+- **Contraseña:** `Prueba2026!`
+- **Teléfono móvil:** `5512345678`
+- **Número de cuenta:** `8766090787749132`
+- **Estatus:** `ACTIVA`
+
+---
+
+### Flujo de Prueba Paso a Paso (Swagger UI en `http://localhost:8080/swagger-ui/index.html`):
+
+#### Paso 1: Autenticación del Cliente (Login)
+- **Endpoint:** `POST /auth/login`
+- **Cuerpo de Solicitud (JSON):**
+```json
+{
+  "correo": "ana.lopez.prueba@example.com",
+  "password": "Prueba2026!"
+}
+```
+*Respuesta:* Retorna `200 OK` con el token Bearer JWT de Ana, verificando identidad y estatus activo.
+
+#### Paso 2: Generar Código de Doble Factor (2FA)
+- **Endpoint:** `POST /api/seguridad/2fa/solicitar`
+- **Cuerpo de Solicitud (JSON):**
+```json
+{
+  "numeroCuenta": "8766090787749132"
+}
+```
+*Respuesta:* Retorna un código OTP criptográfico de 6 dígitos con validez de 5 minutos, persistido en PostgreSQL en la tabla `seguridad_dos_factor_otp`.
+
+#### Paso 3: Ejecutar Operación Financiera con 2FA
+
+##### Caso A: Recarga Telefónica (Tiempo Aire)
+- **Endpoint:** `POST /api/gestopago/transacciones/recarga`
+- **Cuerpo de Solicitud (JSON):**
+```json
+{
+  "idProducto": 582,
+  "idServicio": 133,
+  "telefono": "5512345678",
+  "monto": 10.00,
+  "numeroCuenta": "8766090787749132",
+  "codigo2FA": "<codigo_otp_obtenido_en_paso_2>",
+  "simular": true
+}
+```
+
+##### Caso B: Pago de Servicio (Izzi Telecom)
+- **Endpoint:** `POST /api/gestopago/transacciones/servicio`
+- **Cuerpo de Solicitud (JSON):**
+```json
+{
+  "idProducto": 205,
+  "idServicio": 76,
+  "referencia": "25720381",
+  "montoPago": 150.00,
+  "numeroCuenta": "8766090787749132",
+  "codigo2FA": "<codigo_otp_obtenido_en_paso_2>",
+  "simular": true
+}
+```
+
+#### Paso 4: Pruebas de Seguridad y Anti-Fraude
+1. **Reintento con el mismo código 2FA:** Reenviar la misma petición con el código ya consumido $\rightarrow$ `400 Bad Request` indicando que el código expiró o fue consumido (*Prevención de Replay Attack*).
+2. **Código 2FA incorrecto:** Enviar `"codigo2FA": "000000"` $\rightarrow$ `400 Bad Request: Código 2FA incorrecto`.
+3. **Saldo insuficiente:** Enviar `"monto": 99999.00` $\rightarrow$ `400 Bad Request: Saldo insuficiente en la cuenta` sin afectar los fondos del cliente.
+4. **Verificación en Base de Datos:**
+   - En la tabla `cuentas`: Saldo debitado exactamente por el importe de la operación.
+   - En la tabla `seguridad_dos_factor_otp`: Registro marcado con `consumido = true`.
+   - En la tabla `gestopago_transacciones`: Registro completo de la evidencia de la transacción con folio UPC y número de autorización.
