@@ -1,6 +1,5 @@
 import '../../models/auth_models.dart';
 
-/// Almacenamiento centralizado en memoria segura con control de expiración de token JWT.
 class SecureSessionStorage {
   UserSession? _currentSession;
 
@@ -20,4 +19,3 @@ class SecureSessionStorage {
     _currentSession = null;
   }
 }
-

@@ -7,8 +7,6 @@ class AuthService {
 
   final ApiClient apiClient;
 
-  /// Paso 1: Valida credenciales, verifica que no exista otra sesión simultánea (409)
-  /// y solicita el reto 2FA OTP de 6 dígitos generado en el servidor.
   Future<Login2faChallenge> solicitarReto2FA({
     required String correo,
     required String password,
@@ -33,7 +31,6 @@ class AuthService {
       if (e.statusCode != 404) {
         rethrow;
       }
-      // Respaldo compatible si el servidor remoto aún está actualizando la versión de endpoints
       final otpResp = await apiClient.postJson(
         '/api/seguridad/2fa/solicitar',
         requiereAuth: false,
@@ -52,8 +49,6 @@ class AuthService {
     }
   }
 
-  /// Paso 2: Verifica el código OTP de 6 dígitos en el servidor, registra la sesión única
-  /// activa en la plataforma (WEB o MOVIL) y obtiene el token JWT.
   Future<UserSession> verificar2FAYCrearSesion({
     required String correo,
     required String password,
@@ -105,7 +100,6 @@ class AuthService {
     }
   }
 
-  /// Verifica en el servidor si la sesión actual continúa activa y obtiene el saldo actualizado.
   Future<UserSession?> sincronizarEstadoSesion(UserSession sesionActual) async {
     try {
       final response = await apiClient.getJson('/auth/sesion');
@@ -125,13 +119,9 @@ class AuthService {
     }
   }
 
-  /// Cierra la sesión activa en el servidor para liberar el candado de sesión única.
   Future<void> cerrarSesionEnServidor() async {
     try {
       await apiClient.postJson('/auth/logout');
-    } catch (_) {
-      // Aunque falle la red al salir, se limpia localmente la sesión.
-    }
+    } catch (_) {}
   }
 }
-

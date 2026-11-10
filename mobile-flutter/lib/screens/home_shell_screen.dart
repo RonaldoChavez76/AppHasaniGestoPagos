@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../state/session_controller.dart';
+import 'catalog_screen.dart';
 import 'login_screen.dart';
 
 class HomeShellScreen extends StatefulWidget {
@@ -27,7 +28,6 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
   void initState() {
     super.initState();
     widget.sessionController.addListener(_onSessionChange);
-    // Monitoreo periódico para detectar si la sesión fue reemplazada desde otra plataforma
     _sessionMonitorTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       widget.sessionController.verificarVigenciaSesion();
     });
@@ -99,15 +99,23 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
             onIrACatalogo: () => setState(() => _selectedIndex = 1),
             onIrAHistorial: () => setState(() => _selectedIndex = 2),
           ),
-          _PlaceholderModulo(
-            icono: Icons.storefront_outlined,
-            titulo: 'Catálogo de Productos GestoPago',
-            descripcion: 'Módulo conectado a /api/gestopago/catalogo (Se habilita completo en Fase 3).',
+          CatalogScreen(
+            sessionController: widget.sessionController,
+            onProductoSeleccionado: (producto) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Producto seleccionado: ${producto.nombre} (\$${producto.precio.toStringAsFixed(2)} MXN)',
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
           ),
-          _PlaceholderModulo(
+          const _PlaceholderModulo(
             icono: Icons.receipt_long_outlined,
             titulo: 'Historial de Compras Exitosas',
-            descripcion: 'Módulo conectado a /api/gestopago/transacciones/historial/exitosas (Fase 5).',
+            descripcion: 'Módulo conectado a /api/gestopago/transacciones/historial/exitosas.',
           ),
         ];
 
@@ -423,4 +431,3 @@ class _PlaceholderModulo extends StatelessWidget {
     );
   }
 }
-

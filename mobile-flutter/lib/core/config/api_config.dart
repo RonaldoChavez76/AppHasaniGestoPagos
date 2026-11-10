@@ -16,8 +16,6 @@ class ApiConfig {
   static final ValueNotifier<BackendEnvironment> environmentNotifier =
       ValueNotifier<BackendEnvironment>(BackendEnvironment.renderCloud);
 
-  /// Permite sobreescribir manualmente la plataforma para demostración en vivo,
-  /// o detectarla automáticamente (WEB en navegador, MOVIL en dispositivo móvil).
   static final ValueNotifier<String> plataformaActivaNotifier =
       ValueNotifier<String>(plataformaPorDefecto);
 
@@ -32,4 +30,3 @@ class ApiConfig {
     return Uri.parse('$baseUrl$normalizedPath');
   }
 }
-
