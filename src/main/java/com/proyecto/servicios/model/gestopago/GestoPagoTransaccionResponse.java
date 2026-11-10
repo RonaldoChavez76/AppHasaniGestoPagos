@@ -22,6 +22,15 @@ public class GestoPagoTransaccionResponse {
     @Schema(description = "Tipo de operación procesada", example = "RECARGA")
     private TipoOperacionGestoPago tipoOperacion;
 
+    @Schema(description = "ID del producto adquirido en el catálogo de GestoPago", example = "582")
+    private Integer idProducto;
+
+    @Schema(description = "ID del servicio asociado en GestoPago", example = "133")
+    private Integer idServicio;
+
+    @Schema(description = "Nombre descriptivo del producto adquirido", example = "Recarga Telcel $10")
+    private String nombreProducto;
+
     @Schema(description = "Indica si la transacción fue aceptada y aplicada con éxito por el proveedor", example = "true")
     private boolean exitoso;
 

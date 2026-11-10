@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface CuentaRepository extends JpaRepository<Cuenta, Long>, JpaSpecificationExecutor<Cuenta> {
@@ -20,6 +21,10 @@ public interface CuentaRepository extends JpaRepository<Cuenta, Long>, JpaSpecif
     boolean existsByNumeroCuentaAndClienteId(String numeroCuenta, Long clienteId);
 
     Optional<Cuenta> findByNumeroCuenta(String numeroCuenta);
+
+    List<Cuenta> findByClienteIdOrderByIdAsc(Long clienteId);
+
+    Optional<Cuenta> findFirstByClienteIdAndEstatusIgnoreCaseOrderByIdAsc(Long clienteId, String estatus);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT c FROM Cuenta c WHERE c.numeroCuenta = :numeroCuenta")

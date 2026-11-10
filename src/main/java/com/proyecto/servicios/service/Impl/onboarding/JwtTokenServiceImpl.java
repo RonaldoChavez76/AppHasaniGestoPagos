@@ -2,6 +2,7 @@ package com.proyecto.servicios.service.Impl.onboarding;
 
 import com.proyecto.servicios.service.onboarding.JwtTokenService;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
@@ -33,16 +34,28 @@ public class JwtTokenServiceImpl implements JwtTokenService {
 
     @Override
     public Token emit(String correo, Long usuarioId, Long clienteId) {
+        return emit(correo, usuarioId, clienteId, null, null);
+    }
+
+    @Override
+    public Token emit(String correo, Long usuarioId, Long clienteId, String sessionId, String plataforma) {
         Instant ahora = Instant.now();
         Instant expiraEn = ahora.plusSeconds(duracionSegundos);
-        String valor = Jwts.builder()
+        JwtBuilder builder = Jwts.builder()
                 .subject(correo)
                 .claim("usuarioId", usuarioId)
                 .claim("clienteId", clienteId)
                 .issuedAt(Date.from(ahora))
-                .expiration(Date.from(expiraEn))
-                .signWith(clave())
-                .compact();
+                .expiration(Date.from(expiraEn));
+
+        if (sessionId != null && !sessionId.isBlank()) {
+            builder.id(sessionId).claim("sessionId", sessionId);
+        }
+        if (plataforma != null && !plataforma.isBlank()) {
+            builder.claim("plataforma", plataforma);
+        }
+
+        String valor = builder.signWith(clave()).compact();
         return new Token(valor, expiraEn, duracionSegundos);
     }
 
@@ -54,10 +67,17 @@ public class JwtTokenServiceImpl implements JwtTokenService {
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
+            String sessionId = claims.get("sessionId", String.class);
+            if (sessionId == null) {
+                sessionId = claims.getId();
+            }
+            String plataforma = claims.get("plataforma", String.class);
             return Optional.of(new AuthenticatedUser(
                     claims.get("usuarioId", Long.class),
                     claims.get("clienteId", Long.class),
-                    claims.getSubject()
+                    claims.getSubject(),
+                    sessionId,
+                    plataforma
             ));
         } catch (JwtException | IllegalArgumentException exception) {
             return Optional.empty();

@@ -17,7 +17,7 @@ public class GestoPagoProductController {
         this.productService = productService;
     }
 
-    @GetMapping(value = "/productos", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(value = {"/productos", "/api/gestopago/productos"}, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ApiResponse<GestoPagoProductListResponse>> obtenerProductos() {
         return ResponseEntity.ok(ApiResponse.success(
                 200, "Productos consultados correctamente.", productService.obtenerProductos()));

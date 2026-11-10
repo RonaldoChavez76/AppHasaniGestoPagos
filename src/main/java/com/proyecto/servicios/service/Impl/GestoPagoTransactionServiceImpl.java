@@ -145,7 +145,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                 .build();
 
         return ejecutarTransaccion(TipoOperacionGestoPago.RECARGA, payload, montoTransaccion,
-                cuentaADebitar, request.getSimular());
+                cuentaADebitar, request.getSimular(), obtenerNombreProducto(productoBd, request.getIdProducto()));
     }
 
     @Override
@@ -155,7 +155,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                 request.getIdProducto(), request.getIdServicio(), request.getReferencia(), request.getMontoPago());
 
         // 1. Verificación del producto/servicio en la base de datos PostgreSQL
-        verificarProductoEnBaseDeDatos(request.getIdProducto());
+        GestoPagoCatalogProduct productoBd = verificarProductoEnBaseDeDatos(request.getIdProducto());
 
         // 2. Validación de saldo en cuenta si se especificó numeroCuenta
         Cuenta cuentaADebitar = validarYObtenerCuenta(request.getNumeroCuenta(), request.getMontoPago());
@@ -187,7 +187,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                 .build();
 
         return ejecutarTransaccion(TipoOperacionGestoPago.PAGO_SERVICIO, payload, request.getMontoPago(),
-                cuentaADebitar, request.getSimular());
+                cuentaADebitar, request.getSimular(), obtenerNombreProducto(productoBd, request.getIdProducto()));
     }
 
     @Override
@@ -249,12 +249,46 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<GestoPagoTransaccionResponse> listarComprasExitosasPorUsuario(Long clienteId, String numeroCuenta) {
+        String estadoExitoso = EstadoTransaccion.EXITOSA.name();
+
+        if (numeroCuenta != null && !numeroCuenta.isBlank()) {
+            return transaccionRepository.findByNumeroCuentaAndEstadoOrderByCreatedAtDesc(
+                            numeroCuenta.trim(), estadoExitoso)
+                    .stream()
+                    .map(this::mapearEntidadARespuesta)
+                    .toList();
+        }
+
+        if (clienteId != null && cuentaRepository != null) {
+            List<String> cuentasCliente = cuentaRepository.findByClienteIdOrderByIdAsc(clienteId).stream()
+                    .map(Cuenta::getNumeroCuenta)
+                    .filter(num -> num != null && !num.isBlank())
+                    .toList();
+            if (cuentasCliente.isEmpty()) {
+                return List.of();
+            }
+            return transaccionRepository.findByNumeroCuentaInAndEstadoOrderByCreatedAtDesc(
+                            cuentasCliente, estadoExitoso)
+                    .stream()
+                    .map(this::mapearEntidadARespuesta)
+                    .toList();
+        }
+
+        return transaccionRepository.findTop50ByEstadoOrderByCreatedAtDesc(estadoExitoso).stream()
+                .map(this::mapearEntidadARespuesta)
+                .toList();
+    }
+
     private GestoPagoTransaccionResponse ejecutarTransaccion(
             TipoOperacionGestoPago tipoOperacion,
             GestoPagoSendTxPayload payload,
             BigDecimal montoOriginal,
             Cuenta cuentaADebitar,
-            Boolean simularFlag) {
+            Boolean simularFlag,
+            String nombreProducto) {
 
         String jsonPayload;
         try {
@@ -359,7 +393,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
 
         // 5. Persistir la transacción en la base de datos PostgreSQL (Log evidence mandatorio por GestoPago)
         GestoPagoTransaccion entidad = guardarTransaccionEnBaseDeDatos(
-                tipoOperacion, payload, xmlResponse, estado, jsonPayload, rawXml, numeroCuentaVinculada, montoOriginal);
+                tipoOperacion, payload, xmlResponse, estado, jsonPayload, rawXml, numeroCuentaVinculada, montoOriginal, nombreProducto);
 
         GestoPagoTransaccionResponse respuesta = construirRespuesta(entidad, xmlResponse, montoOriginal, nuevoSaldoCuenta);
         log.info("Transacción UPC={} procesada con estado={}, codigo={}",
@@ -500,7 +534,8 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             String rawRequest,
             String rawXml,
             String numeroCuenta,
-            BigDecimal montoOriginal) {
+            BigDecimal montoOriginal,
+            String nombreProducto) {
 
         GestoPagoTransaccion entidad = new GestoPagoTransaccion();
         entidad.setUpc(payload.getUpc());
@@ -508,6 +543,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         entidad.setTipoOperacion(tipoOperacion.name());
         entidad.setIdProducto(payload.getIdProducto());
         entidad.setIdServicio(payload.getIdServicio());
+        entidad.setNombreProducto(nombreProducto);
         entidad.setTelefono(payload.getTelefono());
         entidad.setReferencia(payload.getReferencia());
         entidad.setMontoPago(payload.getMontoPago() != null ? payload.getMontoPago() : montoOriginal);
@@ -549,10 +585,14 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         }
 
         boolean exitoso = EstadoTransaccion.EXITOSA.name().equals(entidad.getEstado());
+        String nombreProducto = resolverNombreProducto(entidad);
 
         return GestoPagoTransaccionResponse.builder()
                 .upc(entidad.getUpc())
                 .tipoOperacion(TipoOperacionGestoPago.valueOf(entidad.getTipoOperacion()))
+                .idProducto(entidad.getIdProducto())
+                .idServicio(entidad.getIdServicio())
+                .nombreProducto(nombreProducto)
                 .exitoso(exitoso)
                 .estado(EstadoTransaccion.valueOf(entidad.getEstado()))
                 .codigo(entidad.getCodigoRespuesta())
@@ -579,6 +619,9 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         return GestoPagoTransaccionResponse.builder()
                 .upc(entidad.getUpc())
                 .tipoOperacion(TipoOperacionGestoPago.valueOf(entidad.getTipoOperacion()))
+                .idProducto(entidad.getIdProducto())
+                .idServicio(entidad.getIdServicio())
+                .nombreProducto(resolverNombreProducto(entidad))
                 .exitoso(EstadoTransaccion.EXITOSA.name().equals(entidad.getEstado()))
                 .estado(EstadoTransaccion.valueOf(entidad.getEstado()))
                 .codigo(entidad.getCodigoRespuesta())
@@ -598,6 +641,25 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                 .numeroCuenta(entidad.getNumeroCuenta())
                 .fechaRegistro(entidad.getCreatedAt())
                 .build();
+    }
+
+    private String obtenerNombreProducto(GestoPagoCatalogProduct productoBd, Integer idProducto) {
+        if (productoBd != null && productoBd.getName() != null && !productoBd.getName().isBlank()) {
+            return productoBd.getName();
+        }
+        return idProducto != null ? "Producto #" + idProducto : "Operación GestoPago";
+    }
+
+    private String resolverNombreProducto(GestoPagoTransaccion entidad) {
+        if (entidad.getNombreProducto() != null && !entidad.getNombreProducto().isBlank()) {
+            return entidad.getNombreProducto();
+        }
+        if (entidad.getIdProducto() != null && catalogProductRepository != null) {
+            return catalogProductRepository.findByProductId(String.valueOf(entidad.getIdProducto()))
+                    .map(GestoPagoCatalogProduct::getName)
+                    .orElse("Producto #" + entidad.getIdProducto());
+        }
+        return entidad.getIdProducto() != null ? "Producto #" + entidad.getIdProducto() : "Operación GestoPago";
     }
 
     private TipoOperacionGestoPago determinarTipoOperacion(TransaccionGestoPagoRequest request) {

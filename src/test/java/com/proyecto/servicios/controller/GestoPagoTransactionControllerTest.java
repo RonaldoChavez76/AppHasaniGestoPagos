@@ -172,4 +172,34 @@ class GestoPagoTransactionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].upc").value("UPC_HIST"));
     }
+
+    @Test
+    void debeListarUnicamenteComprasExitosasPorUsuarioOCuenta() throws Exception {
+        GestoPagoTransaccionResponse compraExitosa = GestoPagoTransaccionResponse.builder()
+                .upc("UPC_EXITOSA_1")
+                .idProducto(582)
+                .idServicio(133)
+                .nombreProducto("Recarga Telcel $10")
+                .tipoOperacion(TipoOperacionGestoPago.RECARGA)
+                .exitoso(true)
+                .estado(EstadoTransaccion.EXITOSA)
+                .monto(new BigDecimal("10.00"))
+                .idTx("826364546")
+                .numAutorizacion("18596434")
+                .numeroCuenta("4229215075268914")
+                .build();
+
+        when(transactionService.listarComprasExitosasPorUsuario(3L, "4229215075268914"))
+                .thenReturn(List.of(compraExitosa));
+
+        mockMvc.perform(get("/api/gestopago/transacciones/historial/exitosas")
+                        .param("clienteId", "3")
+                        .param("numeroCuenta", "4229215075268914"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.data[0].upc").value("UPC_EXITOSA_1"))
+                .andExpect(jsonPath("$.data[0].exitoso").value(true))
+                .andExpect(jsonPath("$.data[0].nombreProducto").value("Recarga Telcel $10"))
+                .andExpect(jsonPath("$.data[0].numeroCuenta").value("4229215075268914"));
+    }
 }
