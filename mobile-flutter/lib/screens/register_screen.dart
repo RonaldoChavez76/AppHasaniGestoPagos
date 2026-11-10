@@ -77,9 +77,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed: () {
-                      // Aquí se enviarán los datos de registro al backend.
-                    },
+                    onPressed: () => Navigator.pop(context),
                     child: const Text('Registrarse'),
                   ),
                   const SizedBox(height: 12),
