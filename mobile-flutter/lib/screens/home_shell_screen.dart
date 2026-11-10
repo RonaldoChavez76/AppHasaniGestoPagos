@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../state/session_controller.dart';
 import 'catalog_screen.dart';
+import 'history_screen.dart';
 import 'login_screen.dart';
 import 'purchase_screen.dart';
 
@@ -116,10 +117,8 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
               );
             },
           ),
-          const _PlaceholderModulo(
-            icono: Icons.receipt_long_outlined,
-            titulo: 'Historial de Compras Exitosas',
-            descripcion: 'Módulo conectado a /api/gestopago/transacciones/historial/exitosas.',
+          HistoryScreen(
+            sessionController: widget.sessionController,
           ),
         ];
 
@@ -388,48 +387,6 @@ class _PanelResumenSesion extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderModulo extends StatelessWidget {
-  const _PlaceholderModulo({
-    required this.icono,
-    required this.titulo,
-    required this.descripcion,
-  });
-
-  final IconData icono;
-  final String titulo;
-  final String descripcion;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icono, size: 64, color: colorScheme.primary),
-            const SizedBox(height: 16),
-            Text(
-              titulo,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              descripcion,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
-            ),
-          ],
         ),
       ),
     );
