@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../state/session_controller.dart';
 import 'catalog_screen.dart';
 import 'login_screen.dart';
+import 'purchase_screen.dart';
 
 class HomeShellScreen extends StatefulWidget {
   const HomeShellScreen({
@@ -102,12 +103,15 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
           CatalogScreen(
             sessionController: widget.sessionController,
             onProductoSeleccionado: (producto) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Producto seleccionado: ${producto.nombre} (\$${producto.precio.toStringAsFixed(2)} MXN)',
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PurchaseScreen(
+                    producto: producto,
+                    sessionController: widget.sessionController,
+                    onVerHistorial: () {
+                      setState(() => _selectedIndex = 2);
+                    },
                   ),
-                  behavior: SnackBarBehavior.floating,
                 ),
               );
             },
