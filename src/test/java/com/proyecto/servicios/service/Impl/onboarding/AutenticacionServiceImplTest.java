@@ -1,13 +1,22 @@
 package com.proyecto.servicios.service.Impl.onboarding;
 
 import com.proyecto.servicios.entity.onboarding.Cliente;
+import com.proyecto.servicios.entity.onboarding.Cuenta;
 import com.proyecto.servicios.entity.onboarding.Usuario;
+import com.proyecto.servicios.model.onboarding.Login2faChallengeResponse;
+import com.proyecto.servicios.model.onboarding.Login2faSolicitudRequest;
+import com.proyecto.servicios.model.onboarding.Login2faVerificacionRequest;
 import com.proyecto.servicios.model.onboarding.LoginRequest;
 import com.proyecto.servicios.model.onboarding.LoginResponse;
+import com.proyecto.servicios.model.seguridad.TwoFactorOtpResponse;
+import com.proyecto.servicios.repositorys.onboarding.CuentaRepository;
 import com.proyecto.servicios.repositorys.onboarding.UsuarioRepository;
 import com.proyecto.servicios.service.onboarding.CredencialesInvalidasException;
 import com.proyecto.servicios.service.onboarding.JwtTokenService;
+import com.proyecto.servicios.service.onboarding.SesionActivaExistenteException;
 import com.proyecto.servicios.service.onboarding.UsuarioInactivoException;
+import com.proyecto.servicios.service.seguridad.SesionUsuarioService;
+import com.proyecto.servicios.service.seguridad.TwoFactorAuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -97,6 +106,76 @@ class AutenticacionServiceImplTest {
         assertThrows(UsuarioInactivoException.class,
                 () -> service.iniciarSesion(new LoginRequest("cliente@example.com", "Correcta1!")));
         verifyNoInteractions(jwtTokenService);
+    }
+
+    @Test
+    void solicitaReto2FAYVerificaCodigoRegistrandoSesionUnica() {
+        SesionUsuarioService sesionService = mock(SesionUsuarioService.class);
+        TwoFactorAuthService twoFactorService = mock(TwoFactorAuthService.class);
+        CuentaRepository cuentaRepo = mock(CuentaRepository.class);
+
+        AutenticacionServiceImpl authCon2FA = new AutenticacionServiceImpl(
+                usuarioRepository, passwordEncoder, jwtTokenService, sesionService, twoFactorService, cuentaRepo
+        );
+
+        Usuario usuario = usuario(true, true, "Correcta1!");
+        Cuenta cuenta = new Cuenta();
+        cuenta.setNumeroCuenta("4229215075268914");
+        cuenta.setEstatus("ACTIVA");
+        cuenta.setSaldo(new java.math.BigDecimal("5000.00"));
+
+        when(usuarioRepository.findByCliente_Correo("cliente@example.com")).thenReturn(Optional.of(usuario));
+        when(cuentaRepo.findFirstByClienteIdAndEstatusIgnoreCaseOrderByIdAsc(1L, "ACTIVA"))
+                .thenReturn(Optional.of(cuenta));
+        when(twoFactorService.solicitarCodigo(any()))
+                .thenReturn(TwoFactorOtpResponse.builder()
+                        .numeroCuenta("4229215075268914")
+                        .codigoOtp("123456")
+                        .expiraEnSegundos(300)
+                        .build());
+
+        Login2faChallengeResponse reto = authCon2FA.solicitarLoginCon2FA(
+                new Login2faSolicitudRequest("cliente@example.com", "Correcta1!", "MOVIL", false)
+        );
+
+        assertTrue(reto.requiere2FA());
+        assertEquals("123456", reto.codigoOtp());
+        assertEquals("MOVIL", reto.plataforma());
+
+        when(jwtTokenService.emit(eq("cliente@example.com"), eq(2L), eq(1L), anyString(), eq("MOVIL")))
+                .thenReturn(new JwtTokenService.Token("jwt-movil", Instant.now().plusSeconds(900), 900));
+
+        LoginResponse loginFinal = authCon2FA.verificarLoginCon2FA(
+                new Login2faVerificacionRequest("cliente@example.com", "Correcta1!", "123456", "MOVIL", false)
+        );
+
+        assertEquals("jwt-movil", loginFinal.accessToken());
+        assertEquals("MOVIL", loginFinal.plataforma());
+        assertEquals("4229215075268914", loginFinal.numeroCuenta());
+        verify(twoFactorService).validarYConsumirCodigo("4229215075268914", "123456");
+        verify(sesionService).registrarNuevaSesion(eq(2L), eq(1L), anyString(), eq("MOVIL"), eq(900L), eq(false));
+    }
+
+    @Test
+    void detectaConflictoDeSesionActivaEnOtraPlataforma() {
+        SesionUsuarioService sesionService = mock(SesionUsuarioService.class);
+        TwoFactorAuthService twoFactorService = mock(TwoFactorAuthService.class);
+        CuentaRepository cuentaRepo = mock(CuentaRepository.class);
+
+        AutenticacionServiceImpl authConSesiones = new AutenticacionServiceImpl(
+                usuarioRepository, passwordEncoder, jwtTokenService, sesionService, twoFactorService, cuentaRepo
+        );
+
+        Usuario usuario = usuario(true, true, "Correcta1!");
+        when(usuarioRepository.findByCliente_Correo("cliente@example.com")).thenReturn(Optional.of(usuario));
+        doThrow(new SesionActivaExistenteException("MOVIL", java.time.LocalDateTime.now(), java.time.LocalDateTime.now().plusMinutes(10)))
+                .when(sesionService).verificarDisponibilidadOCerrar(2L, "WEB", false);
+
+        assertThrows(SesionActivaExistenteException.class, () ->
+                authConSesiones.solicitarLoginCon2FA(
+                        new Login2faSolicitudRequest("cliente@example.com", "Correcta1!", "WEB", false)
+                )
+        );
     }
 
     private Usuario usuario(boolean activo, boolean clienteActivo, String password) {

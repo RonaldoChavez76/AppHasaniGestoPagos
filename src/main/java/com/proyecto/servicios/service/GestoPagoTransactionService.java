@@ -34,4 +34,13 @@ public interface GestoPagoTransactionService {
      * Lista las transacciones más recientes registradas en la base de datos local.
      */
     List<GestoPagoTransaccionResponse> listarUltimasTransacciones();
+
+    /**
+     * Lista exclusivamente las compras confirmadas como EXITOSAS asociadas a un cliente o cuenta.
+     */
+    default List<GestoPagoTransaccionResponse> listarComprasExitosasPorUsuario(Long clienteId, String numeroCuenta) {
+        return listarUltimasTransacciones().stream()
+                .filter(GestoPagoTransaccionResponse::isExitoso)
+                .toList();
+    }
 }

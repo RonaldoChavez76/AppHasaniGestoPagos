@@ -1,12 +1,15 @@
 package com.proyecto.servicios.controller;
 
 import com.proyecto.servicios.model.ApiResponse;
+import com.proyecto.servicios.model.onboarding.ConflictoSesionResponse;
 import com.proyecto.servicios.service.Impl.GestoPagoIntegrationException;
 import com.proyecto.servicios.service.onboarding.ClienteDuplicadoException;
 import com.proyecto.servicios.service.onboarding.ClienteNoEncontradoException;
 import com.proyecto.servicios.service.onboarding.AccesoNoAutorizadoException;
 import com.proyecto.servicios.service.onboarding.CuentaNoEncontradaException;
 import com.proyecto.servicios.service.onboarding.CredencialesInvalidasException;
+import com.proyecto.servicios.service.onboarding.SesionActivaExistenteException;
+import com.proyecto.servicios.service.onboarding.SesionInvalidaException;
 import com.proyecto.servicios.service.onboarding.UsuarioInactivoException;
 import com.proyecto.servicios.service.onboarding.UsuarioNoEncontradoException;
 import jakarta.validation.ConstraintViolationException;
@@ -79,6 +82,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleCredencialesInvalidas(
             CredencialesInvalidasException exception) {
         return error(HttpStatus.UNAUTHORIZED, exception.getMessage());
+    }
+
+    @ExceptionHandler(SesionInvalidaException.class)
+    public ResponseEntity<ApiResponse<Void>> handleSesionInvalida(
+            SesionInvalidaException exception) {
+        return error(HttpStatus.UNAUTHORIZED, exception.getMessage());
+    }
+
+    @ExceptionHandler(SesionActivaExistenteException.class)
+    public ResponseEntity<ApiResponse<ConflictoSesionResponse>> handleSesionActivaExistente(
+            SesionActivaExistenteException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiResponse<>(
+                        HttpStatus.CONFLICT.value(),
+                        exception.getMessage(),
+                        exception.toResponse(),
+                        java.time.Instant.now()
+                ));
     }
 
     @ExceptionHandler(UsuarioInactivoException.class)

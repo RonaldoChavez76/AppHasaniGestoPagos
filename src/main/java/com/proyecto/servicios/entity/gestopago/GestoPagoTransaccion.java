@@ -34,6 +34,9 @@ public class GestoPagoTransaccion implements Serializable {
     @Column(name = "id_servicio", nullable = false)
     private Integer idServicio;
 
+    @Column(name = "nombre_producto", length = 255)
+    private String nombreProducto;
+
     @Column(name = "telefono", nullable = false, length = 30)
     private String telefono;
 

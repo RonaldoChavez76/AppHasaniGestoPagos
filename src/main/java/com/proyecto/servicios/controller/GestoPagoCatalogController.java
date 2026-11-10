@@ -22,7 +22,7 @@ public class GestoPagoCatalogController {
         this.catalogService = catalogService;
     }
 
-    @GetMapping("/catalogo")
+    @GetMapping({"/catalogo", "/catalogo/productos"})
     public ResponseEntity<ApiResponse<List<GestoPagoCatalogProductResponse>>> obtenerCatalogo() {
         ResponseDTO<List<GestoPagoCatalogProductResponse>> response = catalogService.consultarCatalogo();
         if (!Integer.valueOf(0).equals(response.getCodigo()) || response.getData() == null) {
