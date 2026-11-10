@@ -108,5 +108,62 @@ class TransactionService {
       );
     }
   }
-}
 
+  Future<List<PurchaseTransactionResult>> obtenerHistorialComprasExitosas({
+    int? clienteId,
+    String? numeroCuenta,
+  }) async {
+    final queryParams = <String, String>{};
+    if (clienteId != null) {
+      queryParams['clienteId'] = clienteId.toString();
+    }
+    if (numeroCuenta != null && numeroCuenta.trim().isNotEmpty) {
+      queryParams['numeroCuenta'] = numeroCuenta.trim();
+    }
+
+    try {
+      final response = await apiClient.getJson(
+        '/api/gestopago/transacciones/historial/exitosas',
+        queryParameters: queryParams.isEmpty ? null : queryParams,
+      );
+      final data = response['data'];
+      if (data is List) {
+        return data
+            .whereType<Map<String, dynamic>>()
+            .map(PurchaseTransactionResult.fromJson)
+            .where((tx) => tx.exitoso)
+            .toList();
+      }
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) rethrow;
+      if (e.statusCode != 404) rethrow;
+    }
+
+    final fallbackResp = await apiClient.getJson('/api/gestopago/transacciones');
+    final data = fallbackResp['data'];
+    if (data is List) {
+      final cuentaLimpia = numeroCuenta?.trim();
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(PurchaseTransactionResult.fromJson)
+          .where((tx) {
+            if (!tx.exitoso) return false;
+            if (cuentaLimpia != null &&
+                cuentaLimpia.isNotEmpty &&
+                tx.numeroCuenta != null &&
+                tx.numeroCuenta!.isNotEmpty) {
+              return tx.numeroCuenta == cuentaLimpia;
+            }
+            return true;
+          })
+          .toList();
+    }
+    return const <PurchaseTransactionResult>[];
+  }
+
+  Future<PurchaseTransactionResult> consultarDetallePorUpc(String upc) async {
+    final response = await apiClient.getJson('/api/gestopago/transacciones/${upc.trim()}');
+    final data = response['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    return PurchaseTransactionResult.fromJson(data);
+  }
+}
