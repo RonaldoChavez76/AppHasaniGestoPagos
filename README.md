@@ -2,6 +2,18 @@
 
 Servicio Spring Boot para la integración con GestoPago y el onboarding de clientes persona física.
 
+## Ecosistema de Comercio Digital (Unidad II)
+
+El ecosistema opera con tres repositorios independientes conectados sobre una misma infraestructura de servicios REST sin duplicar lógica de negocio:
+
+| Componente | Tecnología | Repositorio |
+| :--- | :--- | :--- |
+| **Backend API REST** | Spring Boot 3 + Java 17 + PostgreSQL + Redis | [AppHasaniGestoPagos](https://github.com/RonaldoChavez76/AppHasaniGestoPagos) |
+| **Aplicación Móvil** | Flutter & Dart (`MOVIL`) | [gestopago-mobile-flutter](https://github.com/RonaldoChavez76/gestopago-mobile-flutter) |
+| **Aplicación Web (PWA)** | React + TypeScript + Vite (`WEB`) | [gestopago-web-react](https://github.com/RonaldoChavez76/gestopago-web-react) |
+
+La documentación técnica completa del ecosistema y el catálogo de servicios REST se encuentra en [docs/arquitectura-comercio-digital.md](./docs/arquitectura-comercio-digital.md).
+
 ## Tecnologías
 
 - Java 17 como compatibilidad de código y Spring Boot 3.3.6.
