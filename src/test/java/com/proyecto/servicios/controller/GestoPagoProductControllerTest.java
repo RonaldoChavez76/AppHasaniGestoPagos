@@ -37,7 +37,11 @@ class GestoPagoProductControllerTest {
         when(productService.obtenerProductos()).thenReturn(new GestoPagoProductListResponse());
 
         mockMvc.perform(get("/productos"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(200))
+                .andExpect(jsonPath("$.message").value("Productos consultados correctamente."))
+                .andExpect(jsonPath("$.data").exists())
+                .andExpect(jsonPath("$.timestamp").exists());
     }
 
     @Test
@@ -47,6 +51,9 @@ class GestoPagoProductControllerTest {
 
         mockMvc.perform(get("/productos"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.status").value(401));
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").value("La autenticación con GestoPago fue rechazada"))
+                .andExpect(jsonPath("$.data").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").exists());
     }
 }

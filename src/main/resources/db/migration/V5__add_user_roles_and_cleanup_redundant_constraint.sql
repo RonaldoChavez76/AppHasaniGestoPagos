@@ -1,0 +1,6 @@
+ALTER TABLE clientes
+    DROP CONSTRAINT IF EXISTS uq_clientes_id_correo;
+
+ALTER TABLE usuarios
+    ADD COLUMN rol VARCHAR(20) NOT NULL DEFAULT 'CLIENTE',
+    ADD CONSTRAINT ck_usuarios_rol CHECK (rol IN ('CLIENTE', 'EJECUTIVO'));

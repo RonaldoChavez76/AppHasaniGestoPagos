@@ -1,5 +1,6 @@
 package com.proyecto.servicios.service.Impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.proyecto.servicios.client.GestoPagoXmlProductsClient;
@@ -23,6 +24,7 @@ public class GestoPagoProductServiceImpl implements GestoPagoProductService {
 
     private final GestoPagoXmlProductsClient productsClient;
     private final GestoPagoTokenService tokenService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final Integer idDistribuidor;
     private final String codigoDispositivo;
     private final String apiKey;
@@ -45,9 +47,9 @@ public class GestoPagoProductServiceImpl implements GestoPagoProductService {
         log.info("Iniciando consulta de productos en GestoPago");
         try {
             String token = obtenerToken();
-                GestoPagoProductXmlResponse xmlResponse = productsClient.getProductListXml(
+            GestoPagoProductXmlResponse xmlResponse = productsClient.getProductListXml(
                     "Bearer " + token, apiKey, "application/xml");
-                GestoPagoProductListResponse response = mapXmlResponse(xmlResponse);
+            GestoPagoProductListResponse response = mapXmlResponse(xmlResponse);
             log.info("Consulta de productos en GestoPago finalizada correctamente");
             return response;
         } catch (RetryableException exception) {
@@ -55,7 +57,7 @@ public class GestoPagoProductServiceImpl implements GestoPagoProductService {
             throw new GestoPagoIntegrationException("No fue posible comunicarse con GestoPago", HttpStatus.GATEWAY_TIMEOUT, exception);
         } catch (FeignException exception) {
             if (exception.status() == HttpStatus.UNAUTHORIZED.value()) {
-            log.error("Error de autenticación al consultar productos en GestoPago");
+                log.error("Error de autenticación al consultar productos en GestoPago");
                 throw new GestoPagoIntegrationException("La autenticación con GestoPago fue rechazada", HttpStatus.UNAUTHORIZED, exception);
             }
             log.error("GestoPago respondió con estado HTTP {} al consultar productos", exception.status(), exception);
@@ -91,16 +93,36 @@ public class GestoPagoProductServiceImpl implements GestoPagoProductService {
             response.setMessage(xmlResponse.getMensaje().getTexto());
         }
 
-        ArrayNode products = JsonNodeFactory.instance.arrayNode();
+        ArrayNode products = objectMapper.createArrayNode();
         for (GestoPagoProductXmlItem item : xmlResponse.getItems()) {
             GestoPagoProductDto product = new GestoPagoProductDto();
-            product.setId(item.getIdProducto() != null ? item.getIdProducto() : item.getIdServicio());
-            product.setCode(item.getIdProducto() != null ? item.getIdProducto() : item.getIdServicio());
-            product.setName(item.getProducto() != null ? item.getProducto() : item.getServicio());
-            if (item.getPrecio() != null) {
-                product.setPrice(JsonNodeFactory.instance.numberNode(item.getPrecio()));
-            }
-            products.add(JsonNodeFactory.instance.pojoNode(product));
+
+            // Atributos completos del catálogo GestoPago
+            product.setServicio(item.getServicio());
+            product.setProducto(item.getProducto());
+            product.setIdServicio(item.getIdServicio());
+            product.setIdProducto(item.getIdProducto());
+            product.setIdCatTipoServicio(item.getIdCatTipoServicio());
+            product.setTipoFront(item.getTipoFront());
+            product.setHasDigitoVerificador(item.getHasDigitoVerificador());
+            product.setTipoReferencia(item.getTipoReferencia());
+            product.setPrecio(item.getPrecio());
+            product.setShowAyuda(item.getShowAyuda());
+            product.setLegend(item.getLegend() != null ? item.getLegend().trim() : null);
+
+            // Campos estándar y de compatibilidad
+            String id = item.getIdProducto() != null && !item.getIdProducto().isBlank()
+                    ? item.getIdProducto()
+                    : item.getIdServicio();
+            product.setId(id);
+            product.setCode(id);
+            product.setName(item.getProducto() != null && !item.getProducto().isBlank()
+                    ? item.getProducto()
+                    : item.getServicio());
+            product.setPrice(item.getPrecio());
+            product.setActive(true);
+
+            products.add(objectMapper.valueToTree(product));
         }
         response.setData(products);
         return response;

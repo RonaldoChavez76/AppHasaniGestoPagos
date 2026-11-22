@@ -1,6 +1,18 @@
 # AppGestoPagos
 
-Servicio Spring Boot para la integración con GestoPago, consulta de personas y administración local del catálogo de productos.
+Servicio Spring Boot para la integración con GestoPago y el onboarding de clientes persona física.
+
+## Ecosistema de Comercio Digital (Unidad II)
+
+El ecosistema opera con tres repositorios independientes conectados sobre una misma infraestructura de servicios REST sin duplicar lógica de negocio:
+
+| Componente | Tecnología | Repositorio |
+| :--- | :--- | :--- |
+| **Backend API REST** | Spring Boot 3 + Java 17 + PostgreSQL + Redis | [AppHasaniGestoPagos](https://github.com/RonaldoChavez76/AppHasaniGestoPagos) |
+| **Aplicación Móvil** | Flutter & Dart (`MOVIL`) | [gestopago-mobile-flutter](https://github.com/RonaldoChavez76/gestopago-mobile-flutter) |
+| **Aplicación Web (PWA)** | React + TypeScript + Vite (`WEB`) | [gestopago-web-react](https://github.com/RonaldoChavez76/gestopago-web-react) |
+
+La documentación técnica completa del ecosistema y el catálogo de servicios REST se encuentra en [docs/arquitectura-comercio-digital.md](./docs/arquitectura-comercio-digital.md).
 
 ## Tecnologías
 
@@ -39,17 +51,17 @@ El modelo JAXB representa el contrato real:
 
 ### PostgreSQL y Redis
 
-PostgreSQL es la persistencia principal del catálogo y de los tokens. Redis funciona como caché mediante Spring Cache y `@Cacheable`; no se utiliza un repositorio Redis duplicado para las entidades JPA.
+PostgreSQL es la persistencia principal del catálogo y de los tokens. Redis funciona como caché en memoria gestionada mediante `RedisTemplate`, permitiendo un control granular del ciclo de vida y resiliencia ante caídas del servidor de caché; no se utiliza un repositorio Redis duplicado para las entidades JPA.
 
 El flujo del catálogo es:
 
-1. Consultar la caché Redis.
-2. Consultar PostgreSQL si no existe una entrada válida en Redis.
-3. Consultar GestoPago si no hay información local.
-4. Persistir la respuesta externa en PostgreSQL.
-5. Responder mediante la caché en las llamadas posteriores.
+1. Consultar la caché Redis (Nivel 1).
+2. Consultar PostgreSQL si no existe una entrada válida en Redis (Nivel 2).
+3. Consultar GestoPago vía OpenFeign si no hay información local (Nivel 3).
+4. Persistir la respuesta externa en PostgreSQL y poblar Redis.
+5. Responder mediante la caché en las llamadas posteriores (TTL: 10 minutos).
 
-El serializador Redis está configurado con Jackson y soporte para `LocalDateTime`, tipos Java y tipos polimórficos de `ResponseDTO`.
+El serializador Redis está configurado con Jackson (`BasicPolymorphicTypeValidator`) y soporte para tipos Java, `java.time` y tipos polimórficos de `ResponseDTO`.
 
 ### Fallback
 
@@ -81,6 +93,7 @@ Completa los valores de `.env`:
 DB_PASSWORD=tu-password-de-postgres
 GESTOPAGO_AUTH_PASSWORD=tu-password-de-gestopago
 GESTOPAGO_API_KEY=tu-api-key-de-gestopago
+JWT_SECRET=tu-clave-secreta-base64-de-al-menos-32-bytes
 ```
 
 `.env` está excluido de Git. Nunca subas contraseñas, API keys o tokens reales al repositorio.
@@ -93,12 +106,17 @@ La aplicación ejecuta las migraciones Flyway al iniciar:
 
 - `V1__create_gestopago_tokens.sql`: crea la tabla de tokens.
 - `V2__create_gestopago_catalog_products.sql`: crea la tabla e índice del catálogo.
+- `V3__create_onboarding_tables.sql`: crea clientes, domicilios, usuarios, cuentas y referencias faciales.
+- `V4__remove_duplicated_user_email.sql`: establece `clientes.correo` como correo único para el acceso.
+- `V5__add_user_roles_and_cleanup_redundant_constraint.sql`: asigna roles (`CLIENTE`, `EJECUTIVO`) y limpia restricciones redundantes.
 
 La conexión local predeterminada es:
 
 ```text
-jdbc:postgresql://localhost:5432/postgres
+jdbc:postgresql://localhost:5432/PWA
 ```
+
+El detalle de tablas, endpoints del onboarding, autenticación, validaciones y pruebas está en [docs/ONBOARDING.md](./docs/ONBOARDING.md); el diagrama entidad-relación está en [docs/DIAGRAMA_ER.md](./docs/DIAGRAMA_ER.md).
 
 ## Ejecución
 
@@ -113,6 +131,34 @@ La aplicación queda disponible en:
 ```text
 http://localhost:8080
 ```
+
+## Despliegue en Render con Docker
+
+El repositorio incluye un `Dockerfile` multi-stage que compila con Java 17 y Gradle Wrapper,
+ejecuta las pruebas y empaqueta la aplicación en una imagen de ejecución Java 17 no-root.
+Render proporciona el puerto mediante `PORT`; localmente la aplicación usa `8080`.
+
+Al crear el Web Service en Render, selecciona el repositorio y el entorno Docker. Configura
+las variables de entorno requeridas en el panel, nunca en el repositorio:
+
+```text
+SPRING_DATASOURCE_URL=jdbc:postgresql://<HOST_INTERNO>:5432/<BASE>
+SPRING_DATASOURCE_USERNAME=<USUARIO_POSTGRES>
+SPRING_DATASOURCE_PASSWORD=<CONTRASENA_POSTGRES>
+JWT_SECRET=<CLAVE_BASE64_ALEATORIA_DE_AL_MENOS_32_BYTES>
+GESTOPAGO_AUTH_PASSWORD=<CONTRASENA_DEL_PROVEEDOR>
+GESTOPAGO_API_KEY=<API_KEY_DEL_PROVEEDOR>
+```
+
+Redis está habilitado para la caché de la aplicación, así que configura también
+`SPRING_DATA_REDIS_HOST` y `SPRING_DATA_REDIS_PORT` con los datos de un servicio Redis
+accesible desde Render (y `SPRING_DATA_REDIS_PASSWORD` si ese servicio requiere contraseña);
+no dejes el host local `localhost`.
+
+La aplicación ejecuta Flyway al iniciar. Apunta la configuración a la base correcta y
+respalda los datos antes de desplegar migraciones en una base con información existente.
+Puedes configurar la comprobación de salud en Render apuntando a `/actuator/health`,
+ya que el proyecto incluye Spring Boot Actuator configurado.
 
 El Config Server está configurado como opcional. Si no existe un servidor en `localhost:8888`, aparecerá un aviso, pero la aplicación usará la configuración local.
 
@@ -142,7 +188,7 @@ Ejemplo con PowerShell:
 Invoke-RestMethod http://localhost:8080/api/gestopago/catalogo
 ```
 
-La respuesta contiene `codigo`, `mensaje` y `data`. El campo `data` contiene los productos disponibles.
+La respuesta usa la envoltura común `{status, message, data, timestamp}`. El campo `data` contiene los productos disponibles como DTOs, no entidades JPA.
 
 ## Verificar Redis
 
@@ -165,7 +211,7 @@ redis-cli ping
 redis-cli KEYS "*catalogoGestopago*"
 ```
 
-La caché del catálogo utiliza el nombre `catalogoGestopago` y la clave lógica `catalogo-v2`. No existe un endpoint HTTP directo de Redis; se valida a través de `/api/gestopago/catalogo`.
+La caché del catálogo utiliza el nombre `catalogoGestopago` y la clave lógica `catalogo-v2`. No existe un endpoint HTTP directo de Redis; se valida a través de `/api/gestopago/catalogo`. `ResponseDTO` es un formato interno de la capa de servicio/cache y no se expone desde los controladores.
 
 Para comprobar el caché funcionalmente, ejecuta dos veces el endpoint. Ambas respuestas deben ser `HTTP 200`; la segunda puede resolverse desde Redis sin repetir la consulta externa.
 
@@ -201,11 +247,13 @@ src/main/resources/
 ├── application.properties
 └── db/migration/
     ├── V1__create_gestopago_tokens.sql
-    └── V2__create_gestopago_catalog_products.sql
+    ├── V2__create_gestopago_catalog_products.sql
+    ├── V3__create_onboarding_tables.sql
+    ├── V4__remove_duplicated_user_email.sql
+    └── V5__add_user_roles_and_cleanup_redundant_constraint.sql
 ```
 
 ## Advertencias conocidas
 
 - Spring puede mostrar un aviso si Config Server no está disponible en `localhost:8888`; la importación es opcional.
-- Flyway puede advertir que la versión utilizada no ha sido probada oficialmente con PostgreSQL 18.
-- Las advertencias de dependencias opcionales de Oracle/OpenNLP no impiden el build cuando las clases no son requeridas por el flujo ejecutado.
+- Flyway puede advertir que la versión utilizada no ha sido probada oficialmente con versiones muy recientes de PostgreSQL.

@@ -1,27 +1,33 @@
 package com.proyecto.servicios.model.gestopago;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
-import com.fasterxml.jackson.annotation.JsonAnySetter;
-import com.fasterxml.jackson.databind.JsonNode;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.math.BigDecimal;
 
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class GestoPagoProductDto {
 
+    // Identificadores y nombres estándar para compatibilidad
     private String id;
     private String code;
     private String name;
-    private JsonNode price;
+    private BigDecimal price;
     private Boolean active;
-    private final Map<String, JsonNode> additionalFields = new LinkedHashMap<>();
 
-    @JsonAnySetter
-    public void addAdditionalField(String name, JsonNode value) {
-        additionalFields.put(name, value);
-    }
+    // Campos detallados del contrato XML de GestoPago
+    private String servicio;
+    private String producto;
+    private String idServicio;
+    private String idProducto;
+    private String idCatTipoServicio;
+    private String tipoFront;
+    private Boolean hasDigitoVerificador;
+    private String tipoReferencia;
+    private BigDecimal precio;
+    private Boolean showAyuda;
+    private String legend;
 }

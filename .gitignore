@@ -39,6 +39,9 @@ bin/
 ### VS Code ###
 .vscode/
 .env
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
 
 ### Mac OS ###
 .DS_Store
