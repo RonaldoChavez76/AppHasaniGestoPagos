@@ -80,7 +80,22 @@ public class AutenticacionServiceImpl implements AutenticacionService {
                     usuario.getId(),
                     cliente.getId()
             );
-            return new LoginResponse(token.valor(), "Bearer", token.duracionSegundos(), token.expiraEn());
+            return new LoginResponse(
+                    token.valor(),
+                    "Bearer",
+                    token.duracionSegundos(),
+                    token.expiraEn(),
+                    null,
+                    null,
+                    cliente.getId(),
+                    construirNombreCompleto(cliente),
+                    cliente.getCorreo(),
+                    null,
+                    null,
+                    usuario.getId(),
+                    resolverNombreRol(usuario),
+                    esCuentaActiva(usuario)
+            );
         }
 
         return emitirTokenYRegistrarSesion(
@@ -183,9 +198,6 @@ public class AutenticacionServiceImpl implements AutenticacionService {
 
         Usuario usuario = usuarioRepository.findById(user.usuarioId())
                 .orElseThrow(CredencialesInvalidasException::new);
-        if (!usuario.isActivo() || !usuario.getCliente().isActivo()) {
-            throw new UsuarioInactivoException();
-        }
 
         Cliente cliente = usuario.getCliente();
         Optional<Cuenta> cuentaOpt = obtenerCuentaActiva(cliente.getId());
@@ -205,7 +217,8 @@ public class AutenticacionServiceImpl implements AutenticacionService {
                 cuentaOpt.map(Cuenta::getSaldo).orElse(BigDecimal.ZERO),
                 sesionOpt.map(SesionUsuario::getFechaInicio).orElse(null),
                 sesionOpt.map(SesionUsuario::getFechaExpiracion).orElse(null),
-                resolverNombreRol(usuario)
+                resolverNombreRol(usuario),
+                esCuentaActiva(usuario)
         );
     }
 
@@ -219,9 +232,6 @@ public class AutenticacionServiceImpl implements AutenticacionService {
 
         if (!passwordEncoder.matches(password, usuario.getPasswordHash())) {
             throw new CredencialesInvalidasException();
-        }
-        if (!usuario.isActivo() || !usuario.getCliente().isActivo()) {
-            throw new UsuarioInactivoException();
         }
         return usuario;
     }
@@ -270,8 +280,13 @@ public class AutenticacionServiceImpl implements AutenticacionService {
                 cuenta != null ? cuenta.getNumeroCuenta() : null,
                 cuenta != null ? cuenta.getSaldo() : null,
                 usuario.getId(),
-                resolverNombreRol(usuario)
+                resolverNombreRol(usuario),
+                esCuentaActiva(usuario)
         );
+    }
+
+    private boolean esCuentaActiva(Usuario usuario) {
+        return usuario.isActivo() && usuario.getCliente() != null && usuario.getCliente().isActivo();
     }
 
     private String resolverNombreRol(Usuario usuario) {
@@ -282,7 +297,11 @@ public class AutenticacionServiceImpl implements AutenticacionService {
         if (cuentaRepository == null || clienteId == null) {
             return Optional.empty();
         }
-        return cuentaRepository.findFirstByClienteIdAndEstatusIgnoreCaseOrderByIdAsc(clienteId, "ACTIVA");
+        Optional<Cuenta> activa = cuentaRepository.findFirstByClienteIdAndEstatusIgnoreCaseOrderByIdAsc(clienteId, "ACTIVA");
+        if (activa.isPresent()) {
+            return activa;
+        }
+        return cuentaRepository.findByClienteIdOrderByIdAsc(clienteId).stream().findFirst();
     }
 
     private JwtTokenService.AuthenticatedUser extraerUsuarioAutenticado(String authorizationHeader) {

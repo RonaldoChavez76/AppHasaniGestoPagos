@@ -24,4 +24,7 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
             where u.id = :id and u.activo = true and u.cliente.activo = true
             """)
     Optional<RolUsuario> findRolActivaById(@Param("id") Long id);
+
+    @Query("select u.rol from Usuario u where u.id = :id")
+    Optional<RolUsuario> findRolById(@Param("id") Long id);
 }

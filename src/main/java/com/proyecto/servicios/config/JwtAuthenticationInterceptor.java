@@ -90,9 +90,19 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
             }
         }
 
+        String rutaActual = ruta(request);
+        String metodoActual = request.getMethod().toUpperCase(Locale.ROOT);
         var rol = usuarioRepository.findRolActivaById(usuario.get().usuarioId());
         if (rol.isEmpty()) {
-            return rechazar(response, HttpStatus.FORBIDDEN, "El usuario está inactivo.");
+            if ("PUT".equals(metodoActual)
+                    && "/clientes/reactivar".equals(rutaActual)
+                    && usuarioRepository.findRolById(usuario.get().usuarioId()).isPresent()) {
+                request.setAttribute(AUTHENTICATED_USER_ATTRIBUTE, usuario.get());
+                request.setAttribute(AUTHENTICATED_ROLE_ATTRIBUTE, RolUsuario.CLIENTE);
+                return true;
+            }
+            return rechazar(response, HttpStatus.FORBIDDEN,
+                    "Tu cuenta está inactiva. Solo puedes reactivar tu cuenta para volver a operar.");
         }
         request.setAttribute(AUTHENTICATED_USER_ATTRIBUTE, usuario.get());
         request.setAttribute(AUTHENTICATED_ROLE_ATTRIBUTE, rol.get());
@@ -119,6 +129,7 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
                         || "/usuarios/consulta".equals(ruta)))
                 || ("PUT".equals(metodo) && (
                 "/clientes/actualizar".equals(ruta)
+                        || "/clientes/reactivar".equals(ruta)
                         || "/usuarios/password".equals(ruta)))
                 || ("DELETE".equals(metodo) && "/clientes/baja".equals(ruta));
     }

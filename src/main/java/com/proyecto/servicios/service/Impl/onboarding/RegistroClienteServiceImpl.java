@@ -129,6 +129,25 @@ public class RegistroClienteServiceImpl implements RegistroClienteService {
         }
     }
 
+    @Override
+    @Transactional(transactionManager = "sfTransactionManager")
+    public void reactivar(Long clienteId) {
+        Cliente cliente = clienteRepository.findById(clienteId)
+                .orElseThrow(() -> new ClienteNoEncontradoException(clienteId));
+        cliente.setActivo(true);
+
+        Usuario usuario = cliente.getUsuario();
+        if (usuario != null) {
+            usuario.setActivo(true);
+        }
+
+        for (Cuenta cuenta : cliente.getCuentas()) {
+            if ("INACTIVA".equalsIgnoreCase(cuenta.getEstatus())) {
+                cuenta.setEstatus("ACTIVA");
+            }
+        }
+    }
+
     private void validarMayorEdad(LocalDate fechaNacimiento) {
         if (fechaNacimiento == null
                 || fechaNacimiento.isAfter(LocalDate.now())
