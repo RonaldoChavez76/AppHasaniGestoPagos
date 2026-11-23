@@ -43,10 +43,13 @@ public record LoginResponse(
         BigDecimal saldoCuenta,
 
         @Schema(description = "ID del usuario autenticado", example = "2")
-        Long usuarioId
+        Long usuarioId,
+
+        @Schema(description = "Rol del usuario autenticado en el sistema (CLIENTE o EJECUTIVO)", example = "EJECUTIVO")
+        String rol
 ) {
     public LoginResponse(String accessToken, String tokenType, long expiresIn, Instant expiresAt) {
-        this(accessToken, tokenType, expiresIn, expiresAt, null, null, null, null, null, null, null, null);
+        this(accessToken, tokenType, expiresIn, expiresAt, null, null, null, null, null, null, null, null, null);
     }
 
     public LoginResponse(
@@ -62,6 +65,23 @@ public record LoginResponse(
             String numeroCuenta,
             BigDecimal saldoCuenta
     ) {
-        this(accessToken, tokenType, expiresIn, expiresAt, sessionId, plataforma, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, null);
+        this(accessToken, tokenType, expiresIn, expiresAt, sessionId, plataforma, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, null, null);
+    }
+
+    public LoginResponse(
+            String accessToken,
+            String tokenType,
+            long expiresIn,
+            Instant expiresAt,
+            String sessionId,
+            String plataforma,
+            Long clienteId,
+            String nombreCliente,
+            String correo,
+            String numeroCuenta,
+            BigDecimal saldoCuenta,
+            Long usuarioId
+    ) {
+        this(accessToken, tokenType, expiresIn, expiresAt, sessionId, plataforma, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, usuarioId, null);
     }
 }

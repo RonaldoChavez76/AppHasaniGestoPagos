@@ -2,6 +2,7 @@ package com.proyecto.servicios.service.Impl.onboarding;
 
 import com.proyecto.servicios.entity.onboarding.Cliente;
 import com.proyecto.servicios.entity.onboarding.Cuenta;
+import com.proyecto.servicios.entity.onboarding.RolUsuario;
 import com.proyecto.servicios.entity.onboarding.Usuario;
 import com.proyecto.servicios.entity.seguridad.SesionUsuario;
 import com.proyecto.servicios.model.onboarding.*;
@@ -203,7 +204,8 @@ public class AutenticacionServiceImpl implements AutenticacionService {
                 cuentaOpt.map(Cuenta::getNumeroCuenta).orElse(null),
                 cuentaOpt.map(Cuenta::getSaldo).orElse(BigDecimal.ZERO),
                 sesionOpt.map(SesionUsuario::getFechaInicio).orElse(null),
-                sesionOpt.map(SesionUsuario::getFechaExpiracion).orElse(null)
+                sesionOpt.map(SesionUsuario::getFechaExpiracion).orElse(null),
+                resolverNombreRol(usuario)
         );
     }
 
@@ -267,8 +269,13 @@ public class AutenticacionServiceImpl implements AutenticacionService {
                 cliente.getCorreo(),
                 cuenta != null ? cuenta.getNumeroCuenta() : null,
                 cuenta != null ? cuenta.getSaldo() : null,
-                usuario.getId()
+                usuario.getId(),
+                resolverNombreRol(usuario)
         );
+    }
+
+    private String resolverNombreRol(Usuario usuario) {
+        return (usuario.getRol() != null ? usuario.getRol() : RolUsuario.CLIENTE).name();
     }
 
     private Optional<Cuenta> obtenerCuentaActiva(Long clienteId) {
