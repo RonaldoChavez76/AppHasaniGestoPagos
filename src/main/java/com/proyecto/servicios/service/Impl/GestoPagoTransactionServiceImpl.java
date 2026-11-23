@@ -69,7 +69,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             @Value("${gestopago.auth.api-key}") String apiKey,
             @Value("${gestopago.unidad:083}") String defaultUnidad,
             @Value("${gestopago.mock-mode:false}") boolean mockModeGlobal,
-            @Value("${gestopago.security.2fa.required:false}") boolean twoFactorRequired) {
+            @Value("${gestopago.security.2fa.required:true}") boolean twoFactorRequired) {
         this.transactionClient = transactionClient;
         this.tokenService = tokenService;
         this.cryptoService = cryptoService;
