@@ -14,6 +14,7 @@ import com.proyecto.servicios.service.onboarding.ClienteDuplicadoException;
 import com.proyecto.servicios.service.onboarding.ClienteNoEncontradoException;
 import com.proyecto.servicios.service.onboarding.CuentaNoEncontradaException;
 import com.proyecto.servicios.service.onboarding.PageRequestFactory;
+import com.proyecto.servicios.service.onboarding.UsuarioInactivoException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -106,6 +107,10 @@ public class ClienteConsultaServiceImpl implements ClienteConsultaService {
     public ClienteResponse actualizar(Long id, ActualizarClienteRequest request) {
         Cliente cliente = clienteRepository.findWithDomicilioById(id)
                 .orElseThrow(() -> new ClienteNoEncontradoException(id));
+        if (!cliente.isActivo()) {
+            throw new UsuarioInactivoException(
+                    "No se pueden modificar los datos de un cliente dado de baja. Reactiva la cuenta primero.");
+        }
         String correo = request.correo().trim().toLowerCase(Locale.ROOT);
         if (!correo.equals(cliente.getCorreo()) && clienteRepository.existsByCorreoAndIdNot(correo, id)) {
             throw new ClienteDuplicadoException("correo electrónico");

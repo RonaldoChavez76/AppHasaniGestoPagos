@@ -46,10 +46,13 @@ public record LoginResponse(
         Long usuarioId,
 
         @Schema(description = "Rol del usuario autenticado en el sistema (CLIENTE o EJECUTIVO)", example = "EJECUTIVO")
-        String rol
+        String rol,
+
+        @Schema(description = "Indica si el cliente y su cuenta están activos para operar", example = "true")
+        Boolean cuentaActiva
 ) {
     public LoginResponse(String accessToken, String tokenType, long expiresIn, Instant expiresAt) {
-        this(accessToken, tokenType, expiresIn, expiresAt, null, null, null, null, null, null, null, null, null);
+        this(accessToken, tokenType, expiresIn, expiresAt, null, null, null, null, null, null, null, null, null, null);
     }
 
     public LoginResponse(
@@ -65,7 +68,7 @@ public record LoginResponse(
             String numeroCuenta,
             BigDecimal saldoCuenta
     ) {
-        this(accessToken, tokenType, expiresIn, expiresAt, sessionId, plataforma, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, null, null);
+        this(accessToken, tokenType, expiresIn, expiresAt, sessionId, plataforma, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, null, null, null);
     }
 
     public LoginResponse(
@@ -82,6 +85,24 @@ public record LoginResponse(
             BigDecimal saldoCuenta,
             Long usuarioId
     ) {
-        this(accessToken, tokenType, expiresIn, expiresAt, sessionId, plataforma, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, usuarioId, null);
+        this(accessToken, tokenType, expiresIn, expiresAt, sessionId, plataforma, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, usuarioId, null, null);
+    }
+
+    public LoginResponse(
+            String accessToken,
+            String tokenType,
+            long expiresIn,
+            Instant expiresAt,
+            String sessionId,
+            String plataforma,
+            Long clienteId,
+            String nombreCliente,
+            String correo,
+            String numeroCuenta,
+            BigDecimal saldoCuenta,
+            Long usuarioId,
+            String rol
+    ) {
+        this(accessToken, tokenType, expiresIn, expiresAt, sessionId, plataforma, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, usuarioId, rol, null);
     }
 }

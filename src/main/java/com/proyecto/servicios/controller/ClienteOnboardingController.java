@@ -8,6 +8,7 @@ import com.proyecto.servicios.model.onboarding.ClienteResponse;
 import com.proyecto.servicios.model.onboarding.ConsultarClienteRequest;
 import com.proyecto.servicios.model.onboarding.DarDeBajaClienteRequest;
 import com.proyecto.servicios.model.onboarding.PageResponse;
+import com.proyecto.servicios.model.onboarding.ReactivarClienteRequest;
 import com.proyecto.servicios.model.onboarding.RegistroClienteRequest;
 import com.proyecto.servicios.model.onboarding.RegistroClienteResponse;
 import com.proyecto.servicios.model.ApiResponse;
@@ -127,6 +128,17 @@ public class ClienteOnboardingController {
         validarClientePropioOEjecutivo(baja.clienteId(), request);
         registroClienteService.darDeBaja(baja.clienteId());
         return ResponseEntity.ok(ApiResponse.success(200, "Cliente dado de baja correctamente.", null));
+    }
+
+    @PutMapping(value = "/reactivar", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<ApiResponse<Void>> reactivar(
+            @Valid @RequestBody ReactivarClienteRequest reactivacion,
+            HttpServletRequest request
+    ) {
+        validarClientePropioOEjecutivo(reactivacion.clienteId(), request);
+        registroClienteService.reactivar(reactivacion.clienteId());
+        return ResponseEntity.ok(ApiResponse.success(200, "Cliente reactivado correctamente.", null));
     }
 
     private void validarClientePropioOEjecutivo(Long clienteId, HttpServletRequest request) {

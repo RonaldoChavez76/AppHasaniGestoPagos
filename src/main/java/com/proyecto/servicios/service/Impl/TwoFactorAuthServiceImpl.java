@@ -69,7 +69,10 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta)
                 .orElseThrow(() -> new IllegalArgumentException("La cuenta " + numeroCuenta + " no existe"));
 
-        if (!"ACTIVA".equalsIgnoreCase(cuenta.getEstatus())) {
+        boolean cuentaActiva = "ACTIVA".equalsIgnoreCase(cuenta.getEstatus());
+        boolean permitidoEnLoginInactivo = "LOGIN".equalsIgnoreCase(request.getMotivo())
+                && "INACTIVA".equalsIgnoreCase(cuenta.getEstatus());
+        if (!cuentaActiva && !permitidoEnLoginInactivo) {
             throw new IllegalArgumentException("La cuenta " + numeroCuenta + " no se encuentra activa para operar");
         }
 

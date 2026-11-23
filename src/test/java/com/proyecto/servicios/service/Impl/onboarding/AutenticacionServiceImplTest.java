@@ -73,13 +73,16 @@ class AutenticacionServiceImplTest {
     }
 
     @Test
-    void rechazaUsuarioInactivo() {
+    void permiteLoginRestringidoAUsuarioInactivoConMarcaCuentaActivaFalse() {
         when(usuarioRepository.findByCliente_Correo("cliente@example.com"))
                 .thenReturn(Optional.of(usuario(false, true, "Correcta1!")));
+        when(jwtTokenService.emit("cliente@example.com", 2L, 1L))
+                .thenReturn(new JwtTokenService.Token("jwt-inactivo", Instant.now().plusSeconds(900), 900));
 
-        assertThrows(UsuarioInactivoException.class,
-                () -> service.iniciarSesion(new LoginRequest("cliente@example.com", "Correcta1!")));
-        verifyNoInteractions(jwtTokenService);
+        LoginResponse response = service.iniciarSesion(new LoginRequest("cliente@example.com", "Correcta1!"));
+
+        assertEquals("jwt-inactivo", response.accessToken());
+        assertEquals(Boolean.FALSE, response.cuentaActiva());
     }
 
     @Test
@@ -99,13 +102,16 @@ class AutenticacionServiceImplTest {
     }
 
     @Test
-    void rechazaClienteInactivo() {
+    void permiteLoginRestringidoAClienteInactivoConMarcaCuentaActivaFalse() {
         when(usuarioRepository.findByCliente_Correo("cliente@example.com"))
                 .thenReturn(Optional.of(usuario(true, false, "Correcta1!")));
+        when(jwtTokenService.emit("cliente@example.com", 2L, 1L))
+                .thenReturn(new JwtTokenService.Token("jwt-cliente-inactivo", Instant.now().plusSeconds(900), 900));
 
-        assertThrows(UsuarioInactivoException.class,
-                () -> service.iniciarSesion(new LoginRequest("cliente@example.com", "Correcta1!")));
-        verifyNoInteractions(jwtTokenService);
+        LoginResponse response = service.iniciarSesion(new LoginRequest("cliente@example.com", "Correcta1!"));
+
+        assertEquals("jwt-cliente-inactivo", response.accessToken());
+        assertEquals(Boolean.FALSE, response.cuentaActiva());
     }
 
     @Test

@@ -41,7 +41,10 @@ public record SesionActivaResponse(
         LocalDateTime fechaExpiracion,
 
         @Schema(description = "Rol del usuario autenticado en el sistema (CLIENTE o EJECUTIVO)", example = "EJECUTIVO")
-        String rol
+        String rol,
+
+        @Schema(description = "Indica si el cliente y su cuenta están activos para operar", example = "true")
+        Boolean cuentaActiva
 ) {
     public SesionActivaResponse(
             boolean activa,
@@ -56,7 +59,24 @@ public record SesionActivaResponse(
             LocalDateTime fechaInicio,
             LocalDateTime fechaExpiracion
     ) {
-        this(activa, sessionId, plataforma, usuarioId, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, fechaInicio, fechaExpiracion, null);
+        this(activa, sessionId, plataforma, usuarioId, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, fechaInicio, fechaExpiracion, null, null);
+    }
+
+    public SesionActivaResponse(
+            boolean activa,
+            String sessionId,
+            String plataforma,
+            Long usuarioId,
+            Long clienteId,
+            String nombreCliente,
+            String correo,
+            String numeroCuenta,
+            BigDecimal saldoCuenta,
+            LocalDateTime fechaInicio,
+            LocalDateTime fechaExpiracion,
+            String rol
+    ) {
+        this(activa, sessionId, plataforma, usuarioId, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, fechaInicio, fechaExpiracion, rol, null);
     }
 }
 

@@ -412,6 +412,9 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         if (!"ACTIVA".equalsIgnoreCase(cuenta.getEstatus())) {
             throw new IllegalArgumentException("La cuenta " + numeroCuenta + " no se encuentra activa");
         }
+        if (cuenta.getCliente() != null && !cuenta.getCliente().isActivo()) {
+            throw new IllegalArgumentException("El cliente titular de la cuenta " + numeroCuenta + " está inactivo.");
+        }
 
         BigDecimal saldoActual = cuenta.getSaldo() != null ? cuenta.getSaldo() : BigDecimal.ZERO;
         if (montoRequerido != null && saldoActual.compareTo(montoRequerido) < 0) {
