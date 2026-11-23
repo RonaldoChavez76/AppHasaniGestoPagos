@@ -113,8 +113,15 @@ public class AutenticacionServiceImpl implements AutenticacionService {
         }
 
         TwoFactorOtpResponse otpResponse = twoFactorAuthService.solicitarCodigo(
-                Solicitud2faRequest.builder().numeroCuenta(cuenta.getNumeroCuenta()).build()
+                Solicitud2faRequest.builder()
+                        .numeroCuenta(cuenta.getNumeroCuenta())
+                        .motivo("LOGIN")
+                        .build()
         );
+
+        String mensajeChallenge = otpResponse.isCorreoEnviado() && otpResponse.getCorreoDestinoEnmascarado() != null
+                ? "Credenciales válidas. Enviamos el código 2FA de 6 dígitos a tu correo " + otpResponse.getCorreoDestinoEnmascarado() + "."
+                : "Credenciales válidas. Ingrese el código de verificación de doble factor (2FA) de 6 dígitos para iniciar sesión.";
 
         return new Login2faChallengeResponse(
                 true,
@@ -123,7 +130,9 @@ public class AutenticacionServiceImpl implements AutenticacionService {
                 request.plataforma(),
                 otpResponse.getCodigoOtp(),
                 otpResponse.getExpiraEnSegundos(),
-                "Credenciales válidas. Ingrese el código de verificación de doble factor (2FA) de 6 dígitos para iniciar sesión."
+                mensajeChallenge,
+                otpResponse.isCorreoEnviado(),
+                otpResponse.getCorreoDestinoEnmascarado()
         );
     }
 
@@ -140,7 +149,6 @@ public class AutenticacionServiceImpl implements AutenticacionService {
             throw new IllegalStateException("El servicio de autenticación de doble factor (2FA) no está disponible.");
         }
 
-        // Validar y consumir el código OTP desde el servidor (PostgreSQL)
         twoFactorAuthService.validarYConsumirCodigo(cuenta.getNumeroCuenta(), request.codigo2FA());
 
         return emitirTokenYRegistrarSesion(
@@ -258,7 +266,8 @@ public class AutenticacionServiceImpl implements AutenticacionService {
                 construirNombreCompleto(cliente),
                 cliente.getCorreo(),
                 cuenta != null ? cuenta.getNumeroCuenta() : null,
-                cuenta != null ? cuenta.getSaldo() : null
+                cuenta != null ? cuenta.getSaldo() : null,
+                usuario.getId()
         );
     }
 

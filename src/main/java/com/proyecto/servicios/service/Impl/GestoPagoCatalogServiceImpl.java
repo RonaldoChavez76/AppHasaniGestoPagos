@@ -30,7 +30,7 @@ import java.util.Optional;
 @Slf4j
 public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
 
-    private static final String REDIS_KEY = "catalogoGestopago::catalogo-v2";
+    private static final String REDIS_KEY = "catalogoGestopago::catalogo-v3";
 
     private final GestoPagoXmlProductsClient productsClient;
     private final GestoPagoCatalogProductRepository catalogRepository;
@@ -229,15 +229,20 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
     }
 
     private GestoPagoCatalogProductResponse toResponse(GestoPagoCatalogProduct producto) {
+        boolean activo = producto.getActive() == null || Boolean.TRUE.equals(producto.getActive());
         return new GestoPagoCatalogProductResponse(
                 producto.getId(),
                 producto.getProductId(),
                 producto.getCode(),
                 producto.getName(),
                 producto.getPrice(),
-                producto.getActive(),
+                activo,
                 producto.getCreatedAt(),
-                producto.getUpdatedAt()
+                producto.getUpdatedAt(),
+                producto.getServicio(),
+                producto.getIdServicio(),
+                producto.getTipoFront(),
+                producto.getLegend()
         );
     }
 
@@ -249,10 +254,11 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
             entity.setCode(item.getIdProducto() != null ? item.getIdProducto() : item.getIdServicio());
             entity.setName(item.getProducto() != null ? item.getProducto() : item.getServicio());
             entity.setPrice(item.getPrecio());
-            boolean activo = Boolean.TRUE.equals(item.getHasDigitoVerificador())
-                    || Boolean.TRUE.equals(item.getShowAyuda())
-                    || (item.getHasDigitoVerificador() == null && item.getShowAyuda() == null);
-            entity.setActive(activo);
+            entity.setActive(true);
+            entity.setServicio(item.getServicio());
+            entity.setIdServicio(item.getIdServicio());
+            entity.setTipoFront(item.getTipoFront());
+            entity.setLegend(item.getLegend() != null ? item.getLegend().trim() : null);
             productos.add(entity);
         }
         return productos;

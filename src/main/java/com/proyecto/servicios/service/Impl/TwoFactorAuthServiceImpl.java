@@ -1,14 +1,17 @@
 package com.proyecto.servicios.service.Impl;
 
+import com.proyecto.servicios.entity.onboarding.Cliente;
 import com.proyecto.servicios.entity.onboarding.Cuenta;
 import com.proyecto.servicios.entity.seguridad.DosFactorOtp;
 import com.proyecto.servicios.model.seguridad.Solicitud2faRequest;
 import com.proyecto.servicios.model.seguridad.TwoFactorOtpResponse;
 import com.proyecto.servicios.repositorys.onboarding.CuentaRepository;
 import com.proyecto.servicios.repositorys.seguridad.DosFactorOtpRepository;
+import com.proyecto.servicios.service.seguridad.EmailService;
 import com.proyecto.servicios.service.seguridad.TwoFactorAuthService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +20,8 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @Slf4j
@@ -29,15 +34,31 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
     private final CuentaRepository cuentaRepository;
     private final DosFactorOtpRepository otpRepository;
     private final StringRedisTemplate redisTemplate;
+    private final EmailService emailService;
+    private final boolean exponerOtpEnRespuesta;
     private final SecureRandom secureRandom = new SecureRandom();
+
+    @Autowired
+    public TwoFactorAuthServiceImpl(
+            CuentaRepository cuentaRepository,
+            DosFactorOtpRepository otpRepository,
+            @Autowired(required = false) StringRedisTemplate redisTemplate,
+            @Autowired(required = false) EmailService emailService,
+            @Value("${app.2fa.exponer-otp-en-respuesta:true}") boolean exponerOtpEnRespuesta
+    ) {
+        this.cuentaRepository = cuentaRepository;
+        this.otpRepository = otpRepository;
+        this.redisTemplate = redisTemplate;
+        this.emailService = emailService;
+        this.exponerOtpEnRespuesta = exponerOtpEnRespuesta;
+    }
 
     public TwoFactorAuthServiceImpl(
             CuentaRepository cuentaRepository,
             DosFactorOtpRepository otpRepository,
-            @Autowired(required = false) StringRedisTemplate redisTemplate) {
-        this.cuentaRepository = cuentaRepository;
-        this.otpRepository = otpRepository;
-        this.redisTemplate = redisTemplate;
+            StringRedisTemplate redisTemplate
+    ) {
+        this(cuentaRepository, otpRepository, redisTemplate, null, true);
     }
 
     @Override
@@ -45,7 +66,6 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
     public TwoFactorOtpResponse solicitarCodigo(Solicitud2faRequest request) {
         String numeroCuenta = request.getNumeroCuenta().trim();
 
-        // 1. Validar que la cuenta exista y se encuentre activa en PostgreSQL
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta)
                 .orElseThrow(() -> new IllegalArgumentException("La cuenta " + numeroCuenta + " no existe"));
 
@@ -53,17 +73,14 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
             throw new IllegalArgumentException("La cuenta " + numeroCuenta + " no se encuentra activa para operar");
         }
 
-        // 2. Generar código criptográficamente seguro de 6 dígitos numéricos (100000 - 999999)
         int codigoNumerico = 100000 + secureRandom.nextInt(900000);
         String codigoOtp = String.valueOf(codigoNumerico);
         LocalDateTime expiracion = LocalDateTime.now().plus(OTP_TTL);
 
-        // 3. Persistir en PostgreSQL (Garantiza funcionamiento en Producción sin Redis)
         DosFactorOtp otpEntidad = new DosFactorOtp(numeroCuenta, codigoOtp, expiracion);
         otpRepository.save(otpEntidad);
         log.info("Código OTP 2FA persistido en PostgreSQL para cuenta: {}", numeroCuenta);
 
-        // 4. Si Redis está disponible, almacenar como acelerador de lectura con TTL
         if (redisTemplate != null) {
             try {
                 String redisKey = REDIS_PREFIX + numeroCuenta;
@@ -74,14 +91,47 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
             }
         }
 
-        log.info("=== [2FA BANCARIO] CÓDIGO GENERADO PARA CUENTA {} ===> {} ===", numeroCuenta, codigoOtp);
+        boolean correoEnviado = false;
+        String correoEnmascarado = null;
+        Cliente cliente = cuenta.getCliente();
+        if (emailService != null && cliente != null && cliente.getCorreo() != null) {
+            String nombreCliente = construirNombre(cliente);
+            EmailService.ResultadoEnvioCorreo resultado = emailService.enviarCodigo2FA(
+                    cliente.getCorreo(),
+                    nombreCliente,
+                    codigoOtp,
+                    numeroCuenta,
+                    request.getMotivo(),
+                    OTP_TTL.toMinutes()
+            );
+            correoEnviado = resultado.enviado();
+            correoEnmascarado = resultado.correoDestinoEnmascarado();
+
+            if (emailService.estaHabilitado() && !correoEnviado && !exponerOtpEnRespuesta) {
+                throw new IllegalStateException(
+                        "No fue posible enviar el código 2FA a tu correo electrónico. Verifica la configuración de Brevo."
+                );
+            }
+        }
+
+        String codigoRespuesta = (exponerOtpEnRespuesta || emailService == null || !emailService.estaHabilitado())
+                ? codigoOtp
+                : null;
+
+        String mensajeUsuario = correoEnviado
+                ? "Código de verificación OTP enviado a tu correo " + correoEnmascarado + ". Válido por 5 minutos."
+                : "Código de verificación OTP generado exitosamente. Válido por 5 minutos.";
+
+        log.info("=== [2FA BANCARIO] CÓDIGO GENERADO PARA CUENTA {} (correoEnviado={}) ===", numeroCuenta, correoEnviado);
 
         return TwoFactorOtpResponse.builder()
                 .numeroCuenta(numeroCuenta)
-                .mensaje("Código de verificación OTP generado exitosamente. Válido por 5 minutos.")
+                .mensaje(mensajeUsuario)
                 .expiraEnSegundos(EXPIRACION_SEGUNDOS)
-                .codigoOtp(codigoOtp)
+                .codigoOtp(codigoRespuesta)
                 .fechaExpiracion(expiracion.toString())
+                .correoEnviado(correoEnviado)
+                .correoDestinoEnmascarado(correoEnmascarado)
                 .build();
     }
 
@@ -95,7 +145,6 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
         String codigoLimpio = codigo.trim();
         String cuentaLimpia = numeroCuenta.trim();
 
-        // 1. Buscar el último código activo no consumido en PostgreSQL
         Optional<DosFactorOtp> otpOpt = otpRepository.findTopVigentePorCuenta(cuentaLimpia);
 
         if (otpOpt.isEmpty() || otpOpt.get().getExpiraEn().isBefore(LocalDateTime.now())) {
@@ -106,16 +155,13 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
 
         DosFactorOtp otp = otpOpt.get();
 
-        // 2. Validar que el código coincida
         if (!otp.getCodigoOtp().equals(codigoLimpio)) {
             throw new IllegalArgumentException("Código 2FA incorrecto. Verifica el código e intenta nuevamente.");
         }
 
-        // 3. Marcar como consumido en PostgreSQL (One-Time Password)
         otp.setConsumido(true);
         otpRepository.save(otp);
 
-        // 4. Limpiar en Redis si está disponible
         if (redisTemplate != null) {
             try {
                 redisTemplate.delete(REDIS_PREFIX + cuentaLimpia);
@@ -124,5 +170,16 @@ public class TwoFactorAuthServiceImpl implements TwoFactorAuthService {
         }
 
         log.info("Código 2FA validado y consumido con éxito en PostgreSQL para la cuenta: {}", cuentaLimpia);
+    }
+
+    private String construirNombre(Cliente cliente) {
+        return Stream.of(
+                        cliente.getPrimerNombre(),
+                        cliente.getSegundoNombre(),
+                        cliente.getApellidoPaterno(),
+                        cliente.getApellidoMaterno()
+                )
+                .filter(p -> p != null && !p.isBlank())
+                .collect(Collectors.joining(" "));
     }
 }
