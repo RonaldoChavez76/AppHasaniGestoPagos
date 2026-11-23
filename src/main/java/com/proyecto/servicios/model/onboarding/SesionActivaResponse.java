@@ -38,7 +38,25 @@ public record SesionActivaResponse(
         LocalDateTime fechaInicio,
 
         @Schema(description = "Fecha de expiración de la sesión", example = "2026-11-09T18:45:00")
-        LocalDateTime fechaExpiracion
+        LocalDateTime fechaExpiracion,
+
+        @Schema(description = "Rol del usuario autenticado en el sistema (CLIENTE o EJECUTIVO)", example = "EJECUTIVO")
+        String rol
 ) {
+    public SesionActivaResponse(
+            boolean activa,
+            String sessionId,
+            String plataforma,
+            Long usuarioId,
+            Long clienteId,
+            String nombreCliente,
+            String correo,
+            String numeroCuenta,
+            BigDecimal saldoCuenta,
+            LocalDateTime fechaInicio,
+            LocalDateTime fechaExpiracion
+    ) {
+        this(activa, sessionId, plataforma, usuarioId, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, fechaInicio, fechaExpiracion, null);
+    }
 }
 
