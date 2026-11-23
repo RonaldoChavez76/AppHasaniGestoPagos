@@ -8,6 +8,8 @@ import com.proyecto.servicios.repositorys.onboarding.*;
 import com.proyecto.servicios.service.onboarding.ClienteDuplicadoException;
 import com.proyecto.servicios.service.onboarding.ClienteNoEncontradoException;
 import com.proyecto.servicios.service.onboarding.RegistroClienteService;
+import com.proyecto.servicios.service.seguridad.SesionUsuarioService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,24 @@ public class RegistroClienteServiceImpl implements RegistroClienteService {
     private final UsuarioRepository usuarioRepository;
     private final CuentaRepository cuentaRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SesionUsuarioService sesionUsuarioService;
+
+    @Autowired
+    public RegistroClienteServiceImpl(
+            ClienteRepository clienteRepository,
+            DomicilioRepository domicilioRepository,
+            UsuarioRepository usuarioRepository,
+            CuentaRepository cuentaRepository,
+            PasswordEncoder passwordEncoder,
+            @Autowired(required = false) SesionUsuarioService sesionUsuarioService
+    ) {
+        this.clienteRepository = clienteRepository;
+        this.domicilioRepository = domicilioRepository;
+        this.usuarioRepository = usuarioRepository;
+        this.cuentaRepository = cuentaRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.sesionUsuarioService = sesionUsuarioService;
+    }
 
     public RegistroClienteServiceImpl(
             ClienteRepository clienteRepository,
@@ -40,11 +60,7 @@ public class RegistroClienteServiceImpl implements RegistroClienteService {
             CuentaRepository cuentaRepository,
             PasswordEncoder passwordEncoder
     ) {
-        this.clienteRepository = clienteRepository;
-        this.domicilioRepository = domicilioRepository;
-        this.usuarioRepository = usuarioRepository;
-        this.cuentaRepository = cuentaRepository;
-        this.passwordEncoder = passwordEncoder;
+        this(clienteRepository, domicilioRepository, usuarioRepository, cuentaRepository, passwordEncoder, null);
     }
 
     @Override
@@ -101,6 +117,9 @@ public class RegistroClienteServiceImpl implements RegistroClienteService {
         Usuario usuario = cliente.getUsuario();
         if (usuario != null) {
             usuario.setActivo(false);
+            if (sesionUsuarioService != null) {
+                sesionUsuarioService.cerrarTodasLasSesionesActivas(usuario.getId(), "BAJA_CLIENTE");
+            }
         }
 
         for (Cuenta cuenta : cliente.getCuentas()) {

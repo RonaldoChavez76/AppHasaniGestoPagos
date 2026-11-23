@@ -102,7 +102,7 @@ class GestoPagoCatalogServiceImplTest {
                 ResponseDTO.success(0, "En cache", List.of(producto));
 
         Mockito.when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        Mockito.when(valueOps.get("catalogoGestopago::catalogo-v2")).thenReturn(cachedDto);
+        Mockito.when(valueOps.get("catalogoGestopago::catalogo-v3")).thenReturn(cachedDto);
 
         GestoPagoCatalogServiceImpl service = new GestoPagoCatalogServiceImpl(
                 productClient, productRepository, tokenService, redisTemplate, "secret-key", 83, "GPS83-TPV-17"
@@ -133,7 +133,7 @@ class GestoPagoCatalogServiceImplTest {
         producto.setName("Pago");
 
         Mockito.when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        Mockito.when(valueOps.get("catalogoGestopago::catalogo-v2")).thenReturn(null);
+        Mockito.when(valueOps.get("catalogoGestopago::catalogo-v3")).thenReturn(null);
         Mockito.when(productRepository.findAll()).thenReturn(List.of(producto));
 
         GestoPagoCatalogServiceImpl service = new GestoPagoCatalogServiceImpl(
@@ -148,7 +148,7 @@ class GestoPagoCatalogServiceImplTest {
         assertEquals(1, resultado.getData().size());
         Mockito.verify(productRepository).findAll();
         Mockito.verify(valueOps).set(
-                Mockito.eq("catalogoGestopago::catalogo-v2"),
+                Mockito.eq("catalogoGestopago::catalogo-v3"),
                 Mockito.any(),
                 Mockito.eq(java.time.Duration.ofMinutes(10))
         );

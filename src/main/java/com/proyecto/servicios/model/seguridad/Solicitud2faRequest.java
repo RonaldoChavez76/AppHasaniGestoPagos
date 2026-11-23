@@ -19,4 +19,7 @@ public class Solicitud2faRequest {
     @Pattern(regexp = "^[0-9]{10,20}$", message = "El número de cuenta debe tener entre 10 y 20 dígitos")
     @Schema(description = "Número de cuenta bancaria del cliente", example = "4229215075268914")
     private String numeroCuenta;
+
+    @Schema(description = "Contexto de la solicitud (LOGIN o COMPRA)", example = "COMPRA")
+    private String motivo;
 }

@@ -40,9 +40,28 @@ public record LoginResponse(
         String numeroCuenta,
 
         @Schema(description = "Saldo disponible actual en la cuenta", example = "4990.00")
-        BigDecimal saldoCuenta
+        BigDecimal saldoCuenta,
+
+        @Schema(description = "ID del usuario autenticado", example = "2")
+        Long usuarioId
 ) {
     public LoginResponse(String accessToken, String tokenType, long expiresIn, Instant expiresAt) {
-        this(accessToken, tokenType, expiresIn, expiresAt, null, null, null, null, null, null, null);
+        this(accessToken, tokenType, expiresIn, expiresAt, null, null, null, null, null, null, null, null);
+    }
+
+    public LoginResponse(
+            String accessToken,
+            String tokenType,
+            long expiresIn,
+            Instant expiresAt,
+            String sessionId,
+            String plataforma,
+            Long clienteId,
+            String nombreCliente,
+            String correo,
+            String numeroCuenta,
+            BigDecimal saldoCuenta
+    ) {
+        this(accessToken, tokenType, expiresIn, expiresAt, sessionId, plataforma, clienteId, nombreCliente, correo, numeroCuenta, saldoCuenta, null);
     }
 }

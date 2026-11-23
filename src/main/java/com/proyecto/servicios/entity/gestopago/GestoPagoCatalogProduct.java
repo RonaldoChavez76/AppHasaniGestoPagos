@@ -33,6 +33,18 @@ public class GestoPagoCatalogProduct implements Serializable {
     @Column(name = "active", nullable = false)
     private Boolean active = true;
 
+    @Column(name = "servicio", length = 100)
+    private String servicio;
+
+    @Column(name = "id_servicio", length = 50)
+    private String idServicio;
+
+    @Column(name = "tipo_front", length = 20)
+    private String tipoFront;
+
+    @Column(name = "legend", columnDefinition = "TEXT")
+    private String legend;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

@@ -1,5 +1,6 @@
 package com.proyecto.servicios.model.seguridad;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,6 +11,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 @Schema(description = "Respuesta con la información del código OTP 2FA generado")
 public class TwoFactorOtpResponse {
 
@@ -27,4 +29,10 @@ public class TwoFactorOtpResponse {
 
     @Schema(description = "Fecha y hora de expiración en formato ISO-8601", example = "2026-10-26T19:20:00")
     private String fechaExpiracion;
+
+    @Schema(description = "Indica si el código OTP fue enviado por correo electrónico", example = "true")
+    private boolean correoEnviado;
+
+    @Schema(description = "Correo destino enmascarado donde se envió el OTP", example = "ch***5@gmail.com")
+    private String correoDestinoEnmascarado;
 }

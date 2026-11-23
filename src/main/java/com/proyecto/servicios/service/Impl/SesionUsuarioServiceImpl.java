@@ -147,7 +147,12 @@ public class SesionUsuarioServiceImpl implements SesionUsuarioService {
         return sesionRepository.findBySessionId(sessionId.trim());
     }
 
-    private void cerrarTodasLasSesionesActivas(Long usuarioId, String motivo) {
+    @Override
+    @Transactional(transactionManager = "sfTransactionManager")
+    public void cerrarTodasLasSesionesActivas(Long usuarioId, String motivo) {
+        if (usuarioId == null) {
+            return;
+        }
         List<SesionUsuario> activas = sesionRepository.findByUsuarioIdAndActivaTrueOrderByFechaInicioDesc(usuarioId);
         LocalDateTime ahora = LocalDateTime.now();
         for (SesionUsuario s : activas) {

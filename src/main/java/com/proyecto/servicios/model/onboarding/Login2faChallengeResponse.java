@@ -1,7 +1,9 @@
 package com.proyecto.servicios.model.onboarding;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 @Schema(description = "Respuesta del reto de segundo factor (2FA) previo a emitir el token de sesión")
 public record Login2faChallengeResponse(
         @Schema(description = "Indica que las credenciales son válidas y se requiere verificar el código 2FA", example = "true")
@@ -23,7 +25,23 @@ public record Login2faChallengeResponse(
         long expiraEnSegundos,
 
         @Schema(description = "Mensaje informativo para el usuario", example = "Credenciales válidas. Ingrese el código de verificación de 6 dígitos para iniciar sesión.")
-        String mensaje
-) {
-}
+        String mensaje,
 
+        @Schema(description = "Indica si el código OTP fue enviado al correo electrónico", example = "true")
+        Boolean correoEnviado,
+
+        @Schema(description = "Correo destino enmascarado donde se envió el código OTP", example = "ch***5@gmail.com")
+        String correoDestinoEnmascarado
+) {
+    public Login2faChallengeResponse(
+            boolean requiere2FA,
+            String correo,
+            String numeroCuenta,
+            String plataforma,
+            String codigoOtp,
+            long expiraEnSegundos,
+            String mensaje
+    ) {
+        this(requiere2FA, correo, numeroCuenta, plataforma, codigoOtp, expiraEnSegundos, mensaje, false, null);
+    }
+}

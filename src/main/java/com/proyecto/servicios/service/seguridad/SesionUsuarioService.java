@@ -21,6 +21,8 @@ public interface SesionUsuarioService {
 
     void cerrarSesion(Long usuarioId, String sessionId);
 
+    void cerrarTodasLasSesionesActivas(Long usuarioId, String motivo);
+
     boolean esSesionValida(Long usuarioId, String sessionId);
 
     Optional<SesionUsuario> buscarPorSessionId(String sessionId);
