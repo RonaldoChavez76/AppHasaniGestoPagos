@@ -18,7 +18,8 @@ public record GestoPagoCatalogProductResponse(
         String servicio,
         String idServicio,
         String tipoFront,
-        String legend
+        String legend,
+        String logoUrl
 ) {
     public GestoPagoCatalogProductResponse(
             Long id,
@@ -30,6 +31,37 @@ public record GestoPagoCatalogProductResponse(
             LocalDateTime createdAt,
             LocalDateTime updatedAt
     ) {
-        this(id, productId, code, name, price, active, createdAt, updatedAt, null, null, null, null);
+        this(id, productId, code, name, price, active, createdAt, updatedAt, null, null, null, null, null);
+    }
+
+    public GestoPagoCatalogProductResponse(
+            Long id,
+            String productId,
+            String code,
+            String name,
+            BigDecimal price,
+            Boolean active,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt,
+            String servicio,
+            String idServicio,
+            String tipoFront,
+            String legend
+    ) {
+        this(
+                id,
+                productId,
+                code,
+                name,
+                price,
+                active,
+                createdAt,
+                updatedAt,
+                servicio,
+                idServicio,
+                tipoFront,
+                legend,
+                GestoPagoLogoUrl.construir(null, idServicio)
+        );
     }
 }

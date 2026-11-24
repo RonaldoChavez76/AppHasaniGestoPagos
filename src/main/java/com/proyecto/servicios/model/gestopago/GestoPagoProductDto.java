@@ -30,4 +30,5 @@ public class GestoPagoProductDto {
     private BigDecimal precio;
     private Boolean showAyuda;
     private String legend;
+    private String logoUrl;
 }

@@ -7,10 +7,10 @@ import jakarta.validation.constraints.Size;
 public record CambiarPasswordRequest(
         @NotBlank @Size(max = 72) String passwordActual,
         @NotBlank
-        @Size(max = 72)
+        @Size(min = 8, max = 72)
         @Pattern(
-                regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$",
-                message = "La contraseña debe tener al menos 8 caracteres, mayúscula, minúscula, número y símbolo."
+                regexp = "^(?!.*\\s)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,72}$",
+                message = "La contraseña debe tener entre 8 y 72 caracteres sin espacios, con mayúscula, minúscula, número y símbolo."
         )
         String passwordNueva
 ) {

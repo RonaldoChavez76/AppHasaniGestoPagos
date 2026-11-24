@@ -85,7 +85,7 @@ class GestoPagoCatalogServiceEnrichmentTest {
         assertEquals("Pago ABIB disponible", guardado.getLegend());
 
         Mockito.verify(valueOps).set(
-                Mockito.eq("catalogoGestopago::catalogo-v3"),
+                Mockito.eq("catalogoGestopago::catalogo-v4"),
                 Mockito.any(),
                 Mockito.eq(Duration.ofMinutes(10))
         );

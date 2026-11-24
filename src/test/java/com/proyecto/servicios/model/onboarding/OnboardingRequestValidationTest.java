@@ -166,4 +166,66 @@ class OnboardingRequestValidationTest {
         assertEquals(" Clave1! ", request.password());
         assertTrue(validator.validate(request).isEmpty());
     }
+
+    @Test
+    void registroRechazaNumerosEnNombresEspaciosEnPasswordYCamposCortos() {
+        RegistroClienteRequest request = new RegistroClienteRequest(
+                "Juan123", "A", "Perez9", "Lopez!",
+                LocalDate.now().minusYears(25),
+                "GODE561231HDFRRN09", "GODE561231GR8", "M", "MX", "No",
+                "persona@example.com", "5512345678", null, "AB", "X",
+                new BigDecimal("25000.00"),
+                new DomicilioRequest("Ab", "12 A", "3 B", "Co", "Mu", "E", "01234", "MX"),
+                "Clave 123!"
+        );
+
+        Set<String> camposInvalidos = validator.validate(request).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet());
+
+        assertTrue(camposInvalidos.containsAll(Set.of(
+                "primerNombre",
+                "segundoNombre",
+                "apellidoPaterno",
+                "apellidoMaterno",
+                "nacionalidad",
+                "estadoCivil",
+                "ocupacion",
+                "empresa",
+                "password",
+                "domicilio.calle",
+                "domicilio.numeroExterior",
+                "domicilio.numeroInterior",
+                "domicilio.colonia",
+                "domicilio.municipio",
+                "domicilio.estado",
+                "domicilio.pais"
+        )));
+    }
+
+    @Test
+    void registroAceptaNombresCortosDeDosLetrasYAbreviaturaDeEstado() {
+        RegistroClienteRequest request = new RegistroClienteRequest(
+                "Li", "Yu", "Fe", "Ed",
+                LocalDate.now().minusYears(25),
+                "GODE561231HDFRRN09", "GODE561231GR8", "M", "Mexicana", "Soltero",
+                "li.yu@example.com", "5512345678", null, "Analista", "HP",
+                new BigDecimal("18000.00"),
+                new DomicilioRequest("Av. Reforma", "S/N", "2-B", "Centro", "Monterrey", "NL", "64000", "México"),
+                "ClaveSegura1!"
+        );
+
+        assertTrue(validator.validate(request).isEmpty());
+    }
+
+    @Test
+    void cambiarPasswordRechazaEspaciosEnNuevaContrasena() {
+        CambiarPasswordRequest request = new CambiarPasswordRequest("Actual1!", "Nueva 2026!");
+
+        Set<String> camposInvalidos = validator.validate(request).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet());
+
+        assertEquals(Set.of("passwordNueva"), camposInvalidos);
+    }
 }
