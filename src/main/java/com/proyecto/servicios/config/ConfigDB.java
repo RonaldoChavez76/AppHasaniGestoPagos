@@ -45,11 +45,12 @@ public class ConfigDB {
             config.setJdbcUrl(env.getProperty("spring.datasource.url"));
             config.setPassword(env.getProperty("spring.datasource.password"));
             config.setUsername(env.getProperty("spring.datasource.username"));
-            config.setMaximumPoolSize(10);
-            config.setMaxLifetime(600000);
-            config.setConnectionTimeout(5000);
-            config.setValidationTimeout(5000);
-            config.setMinimumIdle(2);
+            config.setMaximumPoolSize(env.getProperty("app.db.pool.max-size", Integer.class, 5));
+            config.setMaxLifetime(env.getProperty("app.db.pool.max-lifetime-ms", Long.class, 600000L));
+            config.setIdleTimeout(env.getProperty("app.db.pool.idle-timeout-ms", Long.class, 300000L));
+            config.setConnectionTimeout(env.getProperty("app.db.pool.connection-timeout-ms", Long.class, 15000L));
+            config.setValidationTimeout(env.getProperty("app.db.pool.validation-timeout-ms", Long.class, 5000L));
+            config.setMinimumIdle(env.getProperty("app.db.pool.min-idle", Integer.class, 1));
             config.setConnectionTestQuery("SELECT 1");
             config.setPoolName("sfDatasource");
 
