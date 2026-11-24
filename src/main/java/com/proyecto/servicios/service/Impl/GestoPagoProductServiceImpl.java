@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.proyecto.servicios.client.GestoPagoXmlProductsClient;
 import com.proyecto.servicios.entity.gestopago.GestoPagoToken;
+import com.proyecto.servicios.model.gestopago.GestoPagoLogoUrl;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductDto;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductListResponse;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductXmlItem;
@@ -14,6 +15,7 @@ import com.proyecto.servicios.service.GestoPagoProductService;
 import feign.FeignException;
 import feign.RetryableException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -28,18 +30,31 @@ public class GestoPagoProductServiceImpl implements GestoPagoProductService {
     private final Integer idDistribuidor;
     private final String codigoDispositivo;
     private final String apiKey;
+    private final String logoBaseUrl;
 
+    public GestoPagoProductServiceImpl(
+            GestoPagoXmlProductsClient productsClient,
+            GestoPagoTokenService tokenService,
+            Integer idDistribuidor,
+            String codigoDispositivo,
+            String apiKey) {
+        this(productsClient, tokenService, idDistribuidor, codigoDispositivo, apiKey, GestoPagoLogoUrl.BASE_URL_DEFECTO);
+    }
+
+    @Autowired
     public GestoPagoProductServiceImpl(
             GestoPagoXmlProductsClient productsClient,
             GestoPagoTokenService tokenService,
             @Value("${gestopago.auth.id-distribuidor}") Integer idDistribuidor,
             @Value("${gestopago.auth.codigo-dispositivo}") String codigoDispositivo,
-            @Value("${gestopago.auth.api-key}") String apiKey) {
+            @Value("${gestopago.auth.api-key}") String apiKey,
+            @Value("${gestopago.products.logo-base-url:" + GestoPagoLogoUrl.BASE_URL_DEFECTO + "}") String logoBaseUrl) {
         this.productsClient = productsClient;
         this.tokenService = tokenService;
         this.idDistribuidor = idDistribuidor;
         this.codigoDispositivo = codigoDispositivo;
         this.apiKey = apiKey;
+        this.logoBaseUrl = logoBaseUrl;
     }
 
     @Override
@@ -109,6 +124,7 @@ public class GestoPagoProductServiceImpl implements GestoPagoProductService {
             product.setPrecio(item.getPrecio());
             product.setShowAyuda(item.getShowAyuda());
             product.setLegend(item.getLegend() != null ? item.getLegend().trim() : null);
+            product.setLogoUrl(GestoPagoLogoUrl.construir(logoBaseUrl, item.getIdServicio()));
 
             // Campos estándar y de compatibilidad
             String id = item.getIdProducto() != null && !item.getIdProducto().isBlank()

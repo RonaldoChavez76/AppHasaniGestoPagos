@@ -1,7 +1,9 @@
 package com.proyecto.servicios.model.onboarding;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -13,13 +15,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record RegistroClienteRequest(
-        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "[\\p{L} ]+")
+        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String primerNombre,
-        @Pattern(regexp = "^$|^[\\p{L} ]{2,50}$")
+        @Pattern(regexp = "^$|^(?=.{2,50}$)[\\p{L}]+(?: [\\p{L}]+)*$")
         String segundoNombre,
-        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "[\\p{L} ]+")
+        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String apellidoPaterno,
-        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L} ]+$")
+        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String apellidoMaterno,
         @NotNull @Past
         LocalDate fechaNacimiento,
@@ -27,28 +29,28 @@ public record RegistroClienteRequest(
         String curp,
         @NotBlank @Pattern(regexp = "(?i)^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$")
         String rfc,
-        @NotBlank @Size(max = 20)
+        @NotBlank @Size(min = 1, max = 20) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String sexo,
-        @NotBlank @Size(max = 40)
+        @NotBlank @Size(min = 3, max = 40) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String nacionalidad,
-        @NotBlank @Size(max = 30)
+        @NotBlank @Size(min = 3, max = 30) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String estadoCivil,
-        @NotBlank @Email @Size(max = 100) @Pattern(regexp = "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+        @NotBlank @Email @Size(min = 6, max = 100) @Pattern(regexp = "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
         String correo,
         @NotBlank @Pattern(regexp = "^[0-9]{10}$")
         String telefonoMovil,
         @Pattern(regexp = "^$|^[0-9]{10}$")
         String telefonoAlternativo,
-        @NotBlank @Size(max = 80)
+        @NotBlank @Size(min = 3, max = 80) @Pattern(regexp = "^[\\p{L}.\\-/]+(?: [\\p{L}.\\-/]+)*$")
         String ocupacion,
-        @NotBlank @Size(max = 100)
+        @NotBlank @Size(min = 2, max = 100) @Pattern(regexp = "^[\\p{L}0-9.,&\\-/]+(?: [\\p{L}0-9.,&\\-/]+)*$")
         String empresa,
-        @NotNull @DecimalMin(value = "0.01") @jakarta.validation.constraints.Digits(integer = 10, fraction = 2)
+        @NotNull @DecimalMin(value = "0.01") @DecimalMax(value = "99999999.99") @Digits(integer = 10, fraction = 2)
         BigDecimal ingresoMensual,
         @NotNull @Valid
         DomicilioRequest domicilio,
-        @NotBlank @Size(max = 72)
-        @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$")
+        @NotBlank @Size(min = 8, max = 72)
+        @Pattern(regexp = "^(?!.*\\s)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,72}$")
         String password
 ) {
     public RegistroClienteRequest {

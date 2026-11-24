@@ -5,14 +5,14 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record DomicilioRequest(
-        @NotBlank @Size(max = 100) String calle,
-        @NotBlank @Size(max = 20) String numeroExterior,
-        @Size(max = 20) String numeroInterior,
-        @NotBlank @Size(max = 80) String colonia,
-        @NotBlank @Size(max = 80) String municipio,
-        @NotBlank @Size(max = 60) String estado,
+        @NotBlank @Size(min = 3, max = 100) @Pattern(regexp = "^[\\p{L}0-9.,#\\-/]+(?: [\\p{L}0-9.,#\\-/]+)*$") String calle,
+        @NotBlank @Size(min = 1, max = 20) @Pattern(regexp = "^[A-Za-z0-9\\-/]+$") String numeroExterior,
+        @Pattern(regexp = "^$|^[A-Za-z0-9\\-/]{1,20}$") String numeroInterior,
+        @NotBlank @Size(min = 3, max = 80) @Pattern(regexp = "^[\\p{L}0-9.\\-]+(?: [\\p{L}0-9.\\-]+)*$") String colonia,
+        @NotBlank @Size(min = 3, max = 80) @Pattern(regexp = "^[\\p{L}.\\-]+(?: [\\p{L}.\\-]+)*$") String municipio,
+        @NotBlank @Size(min = 2, max = 60) @Pattern(regexp = "^[\\p{L}.\\-]+(?: [\\p{L}.\\-]+)*$") String estado,
         @NotBlank @Pattern(regexp = "^[0-9]{5}$") String codigoPostal,
-        @NotBlank @Size(max = 50) String pais
+        @NotBlank @Size(min = 3, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$") String pais
 ) {
     public DomicilioRequest {
         calle = OnboardingText.strip(calle);

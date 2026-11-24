@@ -5,24 +5,29 @@ import com.proyecto.servicios.entity.gestopago.GestoPagoCatalogProduct;
 import com.proyecto.servicios.entity.gestopago.GestoPagoToken;
 import com.proyecto.servicios.model.ResponseDTO;
 import com.proyecto.servicios.model.gestopago.GestoPagoCatalogProductResponse;
+import com.proyecto.servicios.model.gestopago.GestoPagoLogoUrl;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductXmlItem;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductXmlResponse;
+import com.proyecto.servicios.model.onboarding.PageResponse;
 import com.proyecto.servicios.repositorys.gestopago.GestoPagoCatalogProductRepository;
 import com.proyecto.servicios.service.GestoPagoCatalogService;
 import com.proyecto.servicios.service.GestoPagoTokenService;
 import feign.FeignException;
 import feign.RetryableException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.redis.core.RedisTemplate;
 
+import java.text.Normalizer;
 import java.time.Duration;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -30,7 +35,7 @@ import java.util.Optional;
 @Slf4j
 public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
 
-    private static final String REDIS_KEY = "catalogoGestopago::catalogo-v3";
+    private static final String REDIS_KEY = "catalogoGestopago::catalogo-v4";
 
     private final GestoPagoXmlProductsClient productsClient;
     private final GestoPagoCatalogProductRepository catalogRepository;
@@ -39,7 +44,30 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
     private final String apiKey;
     private final Integer idDistribuidor;
     private final String codigoDispositivo;
+    private final String logoBaseUrl;
 
+    public GestoPagoCatalogServiceImpl(
+            GestoPagoXmlProductsClient productsClient,
+            GestoPagoCatalogProductRepository catalogRepository,
+            GestoPagoTokenService tokenService,
+            RedisTemplate<String, Object> redisTemplate,
+            String apiKey,
+            Integer idDistribuidor,
+            String codigoDispositivo
+    ) {
+        this(
+                productsClient,
+                catalogRepository,
+                tokenService,
+                redisTemplate,
+                apiKey,
+                idDistribuidor,
+                codigoDispositivo,
+                GestoPagoLogoUrl.BASE_URL_DEFECTO
+        );
+    }
+
+    @Autowired
     public GestoPagoCatalogServiceImpl(
             GestoPagoXmlProductsClient productsClient,
             GestoPagoCatalogProductRepository catalogRepository,
@@ -47,7 +75,8 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
             RedisTemplate<String, Object> redisTemplate,
             @Value("${gestopago.auth.api-key}") String apiKey,
             @Value("${gestopago.auth.id-distribuidor}") Integer idDistribuidor,
-            @Value("${gestopago.auth.codigo-dispositivo}") String codigoDispositivo
+            @Value("${gestopago.auth.codigo-dispositivo}") String codigoDispositivo,
+            @Value("${gestopago.products.logo-base-url:" + GestoPagoLogoUrl.BASE_URL_DEFECTO + "}") String logoBaseUrl
     ) {
         this.productsClient = productsClient;
         this.catalogRepository = catalogRepository;
@@ -56,6 +85,7 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
         this.apiKey = apiKey;
         this.idDistribuidor = idDistribuidor;
         this.codigoDispositivo = codigoDispositivo;
+        this.logoBaseUrl = logoBaseUrl;
     }
 
     @Override
@@ -110,6 +140,66 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
         return mapearRespuesta(consultarCatalogoDesdeCacheBaseOExterno());
     }
 
+    @Override
+    public ResponseDTO<PageResponse<GestoPagoCatalogProductResponse>> consultarCatalogoPaginado(
+            int page,
+            int size,
+            String busqueda,
+            String categoria,
+            Boolean soloDisponibles
+    ) {
+        ResponseDTO<List<GestoPagoCatalogProductResponse>> base = consultarCatalogo();
+        if (!Integer.valueOf(0).equals(base.getCodigo()) || base.getData() == null) {
+            return ResponseDTO.failure(base.getCodigo(), base.getMensaje());
+        }
+
+        int paginaSolicitada = Math.max(0, page);
+        int tamanoNormalizado = Math.max(1, Math.min(size, 60));
+        String busquedaNorm = busqueda == null ? "" : busqueda.trim().toLowerCase(Locale.ROOT);
+        String categoriaNorm = normalizarTexto(categoria);
+        boolean filtrarDisponibles = Boolean.TRUE.equals(soloDisponibles);
+
+        List<GestoPagoCatalogProductResponse> filtrados = base.getData().stream()
+                .filter(item -> !filtrarDisponibles || !Boolean.FALSE.equals(item.active()))
+                .filter(item -> {
+                    if (categoriaNorm.isEmpty() || "todos".equals(categoriaNorm)) {
+                        return true;
+                    }
+                    return normalizarTexto(clasificarCategoria(item)).equals(categoriaNorm);
+                })
+                .filter(item -> {
+                    if (busquedaNorm.isEmpty()) {
+                        return true;
+                    }
+                    return contiene(item.name(), busquedaNorm)
+                            || contiene(item.servicio(), busquedaNorm)
+                            || contiene(item.productId(), busquedaNorm)
+                            || contiene(item.code(), busquedaNorm)
+                            || contiene(item.legend(), busquedaNorm)
+                            || contiene(clasificarCategoria(item), busquedaNorm);
+                })
+                .toList();
+
+        long totalElements = filtrados.size();
+        int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / tamanoNormalizado);
+        int paginaAjustada = totalPages == 0 ? 0 : Math.min(paginaSolicitada, totalPages - 1);
+        int fromIndex = paginaAjustada * tamanoNormalizado;
+        int toIndex = Math.min(fromIndex + tamanoNormalizado, filtrados.size());
+        List<GestoPagoCatalogProductResponse> contenido =
+                fromIndex >= toIndex ? List.of() : List.copyOf(filtrados.subList(fromIndex, toIndex));
+
+        PageResponse<GestoPagoCatalogProductResponse> pageResponse = new PageResponse<>(
+                contenido,
+                paginaAjustada,
+                tamanoNormalizado,
+                totalElements,
+                totalPages,
+                paginaAjustada == 0,
+                totalPages == 0 || paginaAjustada >= totalPages - 1
+        );
+        return ResponseDTO.success(base.getCodigo(), base.getMensaje(), pageResponse);
+    }
+
     private ResponseDTO<List<GestoPagoCatalogProduct>> consultarCatalogoDesdeCacheBaseOExterno() {
         // 1. NIVEL 1: Consultar Redis (Caché en memoria)
         ResponseDTO<List<GestoPagoCatalogProduct>> cached = consultarCacheRedis();
@@ -124,6 +214,16 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
         log.info("Flujo [2/3] Consultando base de datos PostgreSQL...");
         List<GestoPagoCatalogProduct> localProducts = catalogRepository.findAll();
         if (!localProducts.isEmpty()) {
+            boolean requiereEnriquecimiento = localProducts.stream()
+                    .noneMatch(p -> p.getIdServicio() != null && !p.getIdServicio().isBlank());
+            if (requiereEnriquecimiento) {
+                Optional<List<GestoPagoCatalogProduct>> enriquecidos = intentarEnriquecerDesdeExterno();
+                if (enriquecidos.isPresent()) {
+                    ResponseDTO<List<GestoPagoCatalogProduct>> updated =
+                            ResponseDTO.success(0, "Catálogo enriquecido desde GestoPago", enriquecidos.get());
+                    return guardarEnCache(updated);
+                }
+            }
             log.info("Flujo [2/3] Encontrados {} productos en PostgreSQL. Repoblando Redis y retornando.",
                     localProducts.size());
             ResponseDTO<List<GestoPagoCatalogProduct>> response =
@@ -242,8 +342,64 @@ public class GestoPagoCatalogServiceImpl implements GestoPagoCatalogService {
                 producto.getServicio(),
                 producto.getIdServicio(),
                 producto.getTipoFront(),
-                producto.getLegend()
+                producto.getLegend(),
+                GestoPagoLogoUrl.construir(logoBaseUrl, producto.getIdServicio())
         );
+    }
+
+    private Optional<List<GestoPagoCatalogProduct>> intentarEnriquecerDesdeExterno() {
+        try {
+            String token = obtenerTokenActual();
+            GestoPagoProductXmlResponse response = productsClient.getProductListXml(
+                    "Bearer " + token,
+                    apiKey,
+                    "application/xml"
+            );
+            List<GestoPagoProductXmlItem> items = response != null ? response.getItems() : List.of();
+            if (items.isEmpty()) {
+                return Optional.empty();
+            }
+            List<GestoPagoCatalogProduct> productos = mapXmlToEntity(items);
+            catalogRepository.deleteAllInBatch();
+            catalogRepository.saveAll(productos);
+            log.info("Catálogo local enriquecido automáticamente con {} productos desde GestoPago.", productos.size());
+            return Optional.of(productos);
+        } catch (Exception ex) {
+            log.warn("No fue posible enriquecer el catálogo local desde GestoPago: '{}'. Se mantiene caché local.",
+                    ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private String clasificarCategoria(GestoPagoCatalogProductResponse item) {
+        String nombre = item.name() != null ? item.name() : "";
+        String servicio = item.servicio() != null ? item.servicio() : "";
+        String upper = (nombre + " " + servicio).toUpperCase(Locale.ROOT);
+        if (upper.contains("NETFLIX") || upper.contains("SPOTIFY") || upper.contains("XBOX")
+                || upper.contains("PLAYSTATION") || upper.contains("STEAM") || upper.contains("PIN")
+                || upper.contains("CINEPOLIS") || upper.contains("AMAZON") || upper.contains("GOOGLE")) {
+            return "Entretenimiento y Pines";
+        }
+        if ("1".equals(item.tipoFront())
+                || upper.contains("RECARGA") || upper.contains("TIEMPO AIRE") || upper.contains("PAQUETE")
+                || upper.contains("AMIGO") || upper.contains("TELCEL") || upper.contains("MOVISTAR")
+                || upper.contains("AT&T") || upper.contains("UNEFON") || upper.contains("BAIT")
+                || upper.contains("VIRGIN")) {
+            return "Recargas Telefónicas";
+        }
+        return "Pago de Servicios";
+    }
+
+    private boolean contiene(String campo, String busquedaNorm) {
+        return campo != null && campo.toLowerCase(Locale.ROOT).contains(busquedaNorm);
+    }
+
+    private String normalizarTexto(String texto) {
+        if (texto == null || texto.isBlank()) {
+            return "";
+        }
+        String descompuesto = Normalizer.normalize(texto.trim(), Normalizer.Form.NFD);
+        return descompuesto.replaceAll("\\p{M}+", "").toLowerCase(Locale.ROOT);
     }
 
     private List<GestoPagoCatalogProduct> mapXmlToEntity(List<GestoPagoProductXmlItem> items) {
