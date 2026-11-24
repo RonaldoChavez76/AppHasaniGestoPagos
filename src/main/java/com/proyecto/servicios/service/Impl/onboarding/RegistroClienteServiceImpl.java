@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.Period;
 import java.util.Locale;
@@ -26,7 +25,7 @@ public class RegistroClienteServiceImpl implements RegistroClienteService {
 
     private static final int MAYORIA_DE_EDAD = 18;
     private static final int MAX_INTENTOS_NUMERO_CUENTA = 5;
-    private static final int LONGITUD_MAXIMA_BCRYPT_BYTES = 72;
+    private static final int LONGITUD_MAXIMA_PASSWORD = 12;
     private static final BigDecimal SALDO_INICIAL = BigDecimal.ZERO;
 
     private final ClienteRepository clienteRepository;
@@ -157,9 +156,8 @@ public class RegistroClienteServiceImpl implements RegistroClienteService {
     }
 
     private void validarLongitudPassword(String password) {
-        if (password == null
-                || password.getBytes(StandardCharsets.UTF_8).length > LONGITUD_MAXIMA_BCRYPT_BYTES) {
-            throw new IllegalArgumentException("La contraseña excede el máximo admitido por BCrypt (72 bytes UTF-8).");
+        if (password == null || password.length() > LONGITUD_MAXIMA_PASSWORD) {
+            throw new IllegalArgumentException("La contraseña debe tener máximo 12 caracteres.");
         }
     }
 

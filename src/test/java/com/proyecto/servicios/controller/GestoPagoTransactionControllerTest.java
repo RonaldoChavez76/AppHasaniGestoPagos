@@ -202,4 +202,48 @@ class GestoPagoTransactionControllerTest {
                 .andExpect(jsonPath("$.data[0].nombreProducto").value("Recarga Telcel $10"))
                 .andExpect(jsonPath("$.data[0].numeroCuenta").value("4229215075268914"));
     }
+
+    @Test
+    void debeListarHistorialCompletoYComprasRechazadasConMotivoEspecifico() throws Exception {
+        GestoPagoTransaccionResponse rechazada = GestoPagoTransaccionResponse.builder()
+                .upc("RJ_SALDO_01")
+                .idProducto(582)
+                .idServicio(133)
+                .nombreProducto("Recarga Telcel $100")
+                .tipoOperacion(TipoOperacionGestoPago.RECARGA)
+                .exitoso(false)
+                .estado(EstadoTransaccion.RECHAZADA)
+                .codigo("SALDO_INS")
+                .mensaje("Saldo insuficiente en la cuenta 4229215075268914.")
+                .motivoRechazo("Saldo insuficiente en la cuenta 4229215075268914.")
+                .monto(new BigDecimal("100.00"))
+                .numeroCuenta("4229215075268914")
+                .build();
+
+        when(transactionService.listarHistorialCompletoPorUsuario(3L, "4229215075268914"))
+                .thenReturn(List.of(rechazada));
+        when(transactionService.listarComprasRechazadasPorUsuario(3L, "4229215075268914"))
+                .thenReturn(List.of(rechazada));
+
+        mockMvc.perform(get("/api/gestopago/transacciones/historial/completo")
+                        .param("clienteId", "3")
+                        .param("numeroCuenta", "4229215075268914"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].estado").value("RECHAZADA"))
+                .andExpect(jsonPath("$.data[0].motivoRechazo").value("Saldo insuficiente en la cuenta 4229215075268914."));
+
+        mockMvc.perform(get("/api/gestopago/transacciones/historial/rechazadas")
+                        .param("clienteId", "3")
+                        .param("numeroCuenta", "4229215075268914"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].codigo").value("SALDO_INS"))
+                .andExpect(jsonPath("$.data[0].motivoRechazo").value("Saldo insuficiente en la cuenta 4229215075268914."));
+
+        mockMvc.perform(get("/api/gestopago/transacciones")
+                        .param("incluirRechazadas", "true")
+                        .param("clienteId", "3")
+                        .param("numeroCuenta", "4229215075268914"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].motivoRechazo").value("Saldo insuficiente en la cuenta 4229215075268914."));
+    }
 }

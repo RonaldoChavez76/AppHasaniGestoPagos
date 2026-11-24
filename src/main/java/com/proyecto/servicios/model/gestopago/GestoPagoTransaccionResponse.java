@@ -43,6 +43,9 @@ public class GestoPagoTransaccionResponse {
     @Schema(description = "Mensaje textual retornado por GestoPago", example = "Operacion realizada con exito")
     private String mensaje;
 
+    @Schema(description = "Razón específica del rechazo o fallo cuando la operación no fue exitosa", example = "Saldo insuficiente en la cuenta 4229215075268914")
+    private String motivoRechazo;
+
     @Schema(description = "Número único de transacción asignado por GestoPago", example = "291437188")
     private String idTx;
 

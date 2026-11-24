@@ -43,6 +43,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
     private final GestoPagoCryptoService cryptoService;
     private final GestoPagoCatalogProductRepository catalogProductRepository;
     private final GestoPagoTransaccionRepository transaccionRepository;
+    private final GestoPagoTransaccionRegistroService registroService;
     private final CuentaRepository cuentaRepository;
     private final TwoFactorAuthService twoFactorAuthService;
     private final ObjectMapper objectMapper;
@@ -61,6 +62,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             GestoPagoCryptoService cryptoService,
             GestoPagoCatalogProductRepository catalogProductRepository,
             GestoPagoTransaccionRepository transaccionRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) GestoPagoTransaccionRegistroService registroService,
             CuentaRepository cuentaRepository,
             @org.springframework.beans.factory.annotation.Autowired(required = false) TwoFactorAuthService twoFactorAuthService,
             ObjectMapper objectMapper,
@@ -75,6 +77,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         this.cryptoService = cryptoService;
         this.catalogProductRepository = catalogProductRepository;
         this.transaccionRepository = transaccionRepository;
+        this.registroService = registroService;
         this.cuentaRepository = cuentaRepository;
         this.twoFactorAuthService = twoFactorAuthService;
         this.objectMapper = objectMapper;
@@ -93,6 +96,26 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             GestoPagoCatalogProductRepository catalogProductRepository,
             GestoPagoTransaccionRepository transaccionRepository,
             CuentaRepository cuentaRepository,
+            TwoFactorAuthService twoFactorAuthService,
+            ObjectMapper objectMapper,
+            Integer idDistribuidor,
+            String codigoDispositivo,
+            String apiKey,
+            String defaultUnidad,
+            boolean mockModeGlobal,
+            boolean twoFactorRequired) {
+        this(transactionClient, tokenService, cryptoService, catalogProductRepository,
+                transaccionRepository, null, cuentaRepository, twoFactorAuthService, objectMapper,
+                idDistribuidor, codigoDispositivo, apiKey, defaultUnidad, mockModeGlobal, twoFactorRequired);
+    }
+
+    public GestoPagoTransactionServiceImpl(
+            GestoPagoTransactionClient transactionClient,
+            GestoPagoTokenService tokenService,
+            GestoPagoCryptoService cryptoService,
+            GestoPagoCatalogProductRepository catalogProductRepository,
+            GestoPagoTransaccionRepository transaccionRepository,
+            CuentaRepository cuentaRepository,
             ObjectMapper objectMapper,
             Integer idDistribuidor,
             String codigoDispositivo,
@@ -100,7 +123,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             String defaultUnidad,
             boolean mockModeGlobal) {
         this(transactionClient, tokenService, cryptoService, catalogProductRepository,
-                transaccionRepository, cuentaRepository, null, objectMapper,
+                transaccionRepository, null, cuentaRepository, null, objectMapper,
                 idDistribuidor, codigoDispositivo, apiKey, defaultUnidad, mockModeGlobal, false);
     }
 
@@ -122,18 +145,35 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             montoTransaccion = BigDecimal.ZERO;
         }
 
-        // 2. Validación de saldo en cuenta si se especificó numeroCuenta
-        Cuenta cuentaADebitar = validarYObtenerCuenta(request.getNumeroCuenta(), montoTransaccion);
-        validarSegundoFactorSiAplica(cuentaADebitar, request.getCodigo2FA());
-
-        // 3. Preparación y validación de parámetros de la recarga (tipoFront = 1)
         String upc = sanitizarOGenerarUpc(request.getUpc());
-        validarReglaDuplicadoRecarga(upc);
-
         String horaLocal = LocalDateTime.now().format(HORA_LOCAL_FORMATTER);
         String unidad = (request.getUnidad() != null && !request.getUnidad().isBlank())
                 ? request.getUnidad().trim()
                 : defaultUnidad;
+        String nombreProducto = obtenerNombreProducto(productoBd, request.getIdProducto());
+
+        Cuenta cuentaADebitar;
+        try {
+            cuentaADebitar = validarYObtenerCuenta(request.getNumeroCuenta(), montoTransaccion);
+            validarSegundoFactorSiAplica(cuentaADebitar, request.getCodigo2FA());
+            validarReglaDuplicadoRecarga(upc);
+        } catch (IllegalArgumentException | GestoPagoIntegrationException ex) {
+            registrarRechazoLocal(
+                    TipoOperacionGestoPago.RECARGA,
+                    request.getIdProducto(),
+                    request.getIdServicio(),
+                    nombreProducto,
+                    request.getTelefono(),
+                    null,
+                    montoTransaccion,
+                    upc,
+                    horaLocal,
+                    unidad,
+                    request.getNumeroCuenta(),
+                    ex
+            );
+            throw ex;
+        }
 
         GestoPagoSendTxPayload payload = GestoPagoSendTxPayload.builder()
                 .idProducto(request.getIdProducto())
@@ -145,7 +185,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                 .build();
 
         return ejecutarTransaccion(TipoOperacionGestoPago.RECARGA, payload, montoTransaccion,
-                cuentaADebitar, request.getSimular(), obtenerNombreProducto(productoBd, request.getIdProducto()));
+                cuentaADebitar, request.getSimular(), nombreProducto);
     }
 
     @Override
@@ -154,26 +194,40 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         log.info("Iniciando procesamiento de pago de servicio: idProducto={}, idServicio={}, referencia={}, monto={}",
                 request.getIdProducto(), request.getIdServicio(), request.getReferencia(), request.getMontoPago());
 
-        // 1. Verificación del producto/servicio en la base de datos PostgreSQL
         GestoPagoCatalogProduct productoBd = verificarProductoEnBaseDeDatos(request.getIdProducto());
 
-        // 2. Validación de saldo en cuenta si se especificó numeroCuenta
-        Cuenta cuentaADebitar = validarYObtenerCuenta(request.getNumeroCuenta(), request.getMontoPago());
-        validarSegundoFactorSiAplica(cuentaADebitar, request.getCodigo2FA());
-
-        // 3. Preparación y validación de parámetros (tipoFront = 2 o gift card)
         String upc = sanitizarOGenerarUpc(request.getUpc());
-        validarReglaDuplicadoServicio(upc, request.getIdServicio(), request.getMontoPago());
-
         String horaLocal = LocalDateTime.now().format(HORA_LOCAL_FORMATTER);
         String unidad = (request.getUnidad() != null && !request.getUnidad().isBlank())
                 ? request.getUnidad().trim()
                 : defaultUnidad;
-
-        // Regla GestoPago: para servicios el teléfono se fija a "1111111111" a menos que venga especificado
         String telefono = (request.getTelefono() != null && !request.getTelefono().isBlank())
                 ? request.getTelefono().trim()
                 : TELEFONO_FIJO_SERVICIO;
+        String nombreProducto = obtenerNombreProducto(productoBd, request.getIdProducto());
+
+        Cuenta cuentaADebitar;
+        try {
+            cuentaADebitar = validarYObtenerCuenta(request.getNumeroCuenta(), request.getMontoPago());
+            validarSegundoFactorSiAplica(cuentaADebitar, request.getCodigo2FA());
+            validarReglaDuplicadoServicio(upc, request.getIdServicio(), request.getMontoPago());
+        } catch (IllegalArgumentException | GestoPagoIntegrationException ex) {
+            registrarRechazoLocal(
+                    TipoOperacionGestoPago.PAGO_SERVICIO,
+                    request.getIdProducto(),
+                    request.getIdServicio(),
+                    nombreProducto,
+                    telefono,
+                    request.getReferencia(),
+                    request.getMontoPago(),
+                    upc,
+                    horaLocal,
+                    unidad,
+                    request.getNumeroCuenta(),
+                    ex
+            );
+            throw ex;
+        }
 
         GestoPagoSendTxPayload payload = GestoPagoSendTxPayload.builder()
                 .idProducto(request.getIdProducto())
@@ -187,7 +241,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                 .build();
 
         return ejecutarTransaccion(TipoOperacionGestoPago.PAGO_SERVICIO, payload, request.getMontoPago(),
-                cuentaADebitar, request.getSimular(), obtenerNombreProducto(productoBd, request.getIdProducto()));
+                cuentaADebitar, request.getSimular(), nombreProducto);
     }
 
     @Override
@@ -196,11 +250,34 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         TipoOperacionGestoPago tipo = determinarTipoOperacion(request);
 
         if (tipo == TipoOperacionGestoPago.PAGO_SERVICIO) {
-            if (request.getReferencia() == null || request.getReferencia().isBlank()) {
-                throw new IllegalArgumentException("La referencia es requerida para pagos de servicios");
-            }
-            if (request.getMontoPago() == null || request.getMontoPago().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException("El montoPago debe ser mayor a 0 para pagos de servicios");
+            try {
+                if (request.getReferencia() == null || request.getReferencia().isBlank()) {
+                    throw new IllegalArgumentException("La referencia es requerida para pagos de servicios");
+                }
+                if (request.getMontoPago() == null || request.getMontoPago().compareTo(BigDecimal.ZERO) <= 0) {
+                    throw new IllegalArgumentException("El montoPago debe ser mayor a 0 para pagos de servicios");
+                }
+            } catch (IllegalArgumentException ex) {
+                GestoPagoCatalogProduct productoBd = verificarProductoEnBaseDeDatos(request.getIdProducto());
+                registrarRechazoLocal(
+                        TipoOperacionGestoPago.PAGO_SERVICIO,
+                        request.getIdProducto(),
+                        request.getIdServicio(),
+                        obtenerNombreProducto(productoBd, request.getIdProducto()),
+                        request.getTelefono() != null && !request.getTelefono().isBlank()
+                                ? request.getTelefono().trim()
+                                : TELEFONO_FIJO_SERVICIO,
+                        request.getReferencia(),
+                        request.getMontoPago(),
+                        sanitizarOGenerarUpc(request.getUpc()),
+                        LocalDateTime.now().format(HORA_LOCAL_FORMATTER),
+                        request.getUnidad() != null && !request.getUnidad().isBlank()
+                                ? request.getUnidad().trim()
+                                : defaultUnidad,
+                        request.getNumeroCuenta(),
+                        ex
+                );
+                throw ex;
             }
             PagoServicioRequest servicioReq = PagoServicioRequest.builder()
                     .idProducto(request.getIdProducto())
@@ -217,7 +294,28 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             return procesarPagoServicio(servicioReq);
         } else {
             if (request.getTelefono() == null || !request.getTelefono().matches("^[0-9]{10}$")) {
-                throw new IllegalArgumentException("El teléfono debe contener 10 dígitos numéricos para recargas");
+                IllegalArgumentException ex = new IllegalArgumentException(
+                        "El teléfono debe contener 10 dígitos numéricos para recargas");
+                GestoPagoCatalogProduct productoBd = verificarProductoEnBaseDeDatos(request.getIdProducto());
+                registrarRechazoLocal(
+                        TipoOperacionGestoPago.RECARGA,
+                        request.getIdProducto(),
+                        request.getIdServicio(),
+                        obtenerNombreProducto(productoBd, request.getIdProducto()),
+                        request.getTelefono() != null && !request.getTelefono().isBlank()
+                                ? request.getTelefono().trim()
+                                : "0000000000",
+                        request.getReferencia(),
+                        request.getMontoPago(),
+                        sanitizarOGenerarUpc(request.getUpc()),
+                        LocalDateTime.now().format(HORA_LOCAL_FORMATTER),
+                        request.getUnidad() != null && !request.getUnidad().isBlank()
+                                ? request.getUnidad().trim()
+                                : defaultUnidad,
+                        request.getNumeroCuenta(),
+                        ex
+                );
+                throw ex;
             }
             RecargaTelefonicaRequest recargaReq = RecargaTelefonicaRequest.builder()
                     .idProducto(request.getIdProducto())
@@ -252,14 +350,42 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
     @Override
     @Transactional(readOnly = true)
     public List<GestoPagoTransaccionResponse> listarComprasExitosasPorUsuario(Long clienteId, String numeroCuenta) {
+        return listarPorFiltro(clienteId, numeroCuenta, FiltroHistorial.SOLO_EXITOSAS);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GestoPagoTransaccionResponse> listarHistorialCompletoPorUsuario(Long clienteId, String numeroCuenta) {
+        return listarPorFiltro(clienteId, numeroCuenta, FiltroHistorial.COMPLETO);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GestoPagoTransaccionResponse> listarComprasRechazadasPorUsuario(Long clienteId, String numeroCuenta) {
+        return listarPorFiltro(clienteId, numeroCuenta, FiltroHistorial.SOLO_RECHAZADAS);
+    }
+
+    private enum FiltroHistorial {
+        SOLO_EXITOSAS,
+        COMPLETO,
+        SOLO_RECHAZADAS
+    }
+
+    private List<GestoPagoTransaccionResponse> listarPorFiltro(
+            Long clienteId, String numeroCuenta, FiltroHistorial filtro) {
         String estadoExitoso = EstadoTransaccion.EXITOSA.name();
 
         if (numeroCuenta != null && !numeroCuenta.isBlank()) {
-            return transaccionRepository.findByNumeroCuentaAndEstadoOrderByCreatedAtDesc(
-                            numeroCuenta.trim(), estadoExitoso)
-                    .stream()
-                    .map(this::mapearEntidadARespuesta)
-                    .toList();
+            String cuentaLimpia = numeroCuenta.trim();
+            List<GestoPagoTransaccion> filas = switch (filtro) {
+                case SOLO_EXITOSAS -> transaccionRepository
+                        .findByNumeroCuentaAndEstadoOrderByCreatedAtDesc(cuentaLimpia, estadoExitoso);
+                case COMPLETO -> transaccionRepository
+                        .findByNumeroCuentaOrderByCreatedAtDesc(cuentaLimpia);
+                case SOLO_RECHAZADAS -> transaccionRepository
+                        .findByNumeroCuentaAndEstadoNotOrderByCreatedAtDesc(cuentaLimpia, estadoExitoso);
+            };
+            return filas.stream().map(this::mapearEntidadARespuesta).toList();
         }
 
         if (clienteId != null && cuentaRepository != null) {
@@ -270,16 +396,23 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             if (cuentasCliente.isEmpty()) {
                 return List.of();
             }
-            return transaccionRepository.findByNumeroCuentaInAndEstadoOrderByCreatedAtDesc(
-                            cuentasCliente, estadoExitoso)
-                    .stream()
-                    .map(this::mapearEntidadARespuesta)
-                    .toList();
+            List<GestoPagoTransaccion> filas = switch (filtro) {
+                case SOLO_EXITOSAS -> transaccionRepository
+                        .findByNumeroCuentaInAndEstadoOrderByCreatedAtDesc(cuentasCliente, estadoExitoso);
+                case COMPLETO -> transaccionRepository
+                        .findByNumeroCuentaInOrderByCreatedAtDesc(cuentasCliente);
+                case SOLO_RECHAZADAS -> transaccionRepository
+                        .findByNumeroCuentaInAndEstadoNotOrderByCreatedAtDesc(cuentasCliente, estadoExitoso);
+            };
+            return filas.stream().map(this::mapearEntidadARespuesta).toList();
         }
 
-        return transaccionRepository.findTop50ByEstadoOrderByCreatedAtDesc(estadoExitoso).stream()
-                .map(this::mapearEntidadARespuesta)
-                .toList();
+        List<GestoPagoTransaccion> filas = switch (filtro) {
+            case SOLO_EXITOSAS -> transaccionRepository.findTop50ByEstadoOrderByCreatedAtDesc(estadoExitoso);
+            case COMPLETO -> transaccionRepository.findTop50ByOrderByCreatedAtDesc();
+            case SOLO_RECHAZADAS -> transaccionRepository.findTop50ByEstadoNotOrderByCreatedAtDesc(estadoExitoso);
+        };
+        return filas.stream().map(this::mapearEntidadARespuesta).toList();
     }
 
     private GestoPagoTransaccionResponse ejecutarTransaccion(
@@ -301,8 +434,10 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         GestoPagoSendTxXmlResponse xmlResponse = null;
         EstadoTransaccion estado = EstadoTransaccion.ERROR;
         String rawXml = null;
+        String codigoFallback = null;
+        String motivoRechazo = null;
+        GestoPagoIntegrationException excepcionToken = null;
 
-        // Evaluar si opera en modo simulación (mock) para pruebas locales
         boolean usarMock = mockModeGlobal || Boolean.TRUE.equals(simularFlag);
 
         if (usarMock) {
@@ -310,11 +445,11 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             xmlResponse = generarMockResponse(tipoOperacion, payload, montoOriginal);
             estado = EstadoTransaccion.EXITOSA;
         } else {
-            String token = obtenerTokenValido();
-            String encryptedSigned = cryptoService.encrypt(jsonPayload);
-            String random = System.currentTimeMillis() + "_rand";
-
             try {
+                String token = obtenerTokenValido();
+                String encryptedSigned = cryptoService.encrypt(jsonPayload);
+                String random = System.currentTimeMillis() + "_rand";
+
                 MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
                 form.add("random", random);
                 form.add("signed", encryptedSigned);
@@ -329,49 +464,95 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                         estado = EstadoTransaccion.EXITOSA;
                     } else if (xmlResponse.esDuplicada()) {
                         estado = EstadoTransaccion.DUPLICADA;
+                        motivoRechazo = construirMotivoRechazoXml(xmlResponse);
                     } else if (xmlResponse.esTimeout()) {
                         estado = EstadoTransaccion.TIMEOUT;
+                        motivoRechazo = construirMotivoRechazoXml(xmlResponse);
                     } else {
                         estado = EstadoTransaccion.RECHAZADA;
+                        motivoRechazo = construirMotivoRechazoXml(xmlResponse);
                     }
+                } else {
+                    estado = EstadoTransaccion.ERROR;
+                    codigoFallback = "XML_VACIO";
+                    motivoRechazo = "GestoPago devolvió una respuesta vacía sin confirmación.";
                 }
             } catch (RetryableException ex) {
                 log.error("Timeout de lectura (62s) en sendTx.do para UPC={}: {}", payload.getUpc(), ex.getMessage());
                 estado = EstadoTransaccion.TIMEOUT;
+                codigoFallback = "TIMEOUT";
+                motivoRechazo = truncar(
+                        "Tiempo de espera agotado (62s) al comunicarse con GestoPago" + sufijoDetalle(ex.getMessage()),
+                        500);
             } catch (FeignException ex) {
                 if (ex.status() == HttpStatus.FORBIDDEN.value() || ex.status() == HttpStatus.UNAUTHORIZED.value()) {
                     log.warn("Token de GestoPago expirado o rechazado (HTTP {}). Renovando token y reintentando sendTx...", ex.status());
-                    tokenService.renovarToken();
-                    String nuevoToken = obtenerTokenValido();
-
-                    MultiValueMap<String, String> retryForm = new LinkedMultiValueMap<>();
-                    retryForm.add("random", System.currentTimeMillis() + "_rand");
-                    retryForm.add("signed", encryptedSigned);
-
                     try {
+                        tokenService.renovarToken();
+                        String nuevoToken = obtenerTokenValido();
+                        String encryptedSigned = cryptoService.encrypt(jsonPayload);
+
+                        MultiValueMap<String, String> retryForm = new LinkedMultiValueMap<>();
+                        retryForm.add("random", System.currentTimeMillis() + "_rand");
+                        retryForm.add("signed", encryptedSigned);
+
                         xmlResponse = transactionClient.sendTxForm("Bearer " + nuevoToken, apiKey, retryForm);
                         if (xmlResponse != null && xmlResponse.esExitosa()) {
                             estado = EstadoTransaccion.EXITOSA;
                         } else if (xmlResponse != null && xmlResponse.esDuplicada()) {
                             estado = EstadoTransaccion.DUPLICADA;
+                            motivoRechazo = construirMotivoRechazoXml(xmlResponse);
+                        } else if (xmlResponse != null) {
+                            estado = xmlResponse.esTimeout() ? EstadoTransaccion.TIMEOUT : EstadoTransaccion.RECHAZADA;
+                            motivoRechazo = construirMotivoRechazoXml(xmlResponse);
                         } else {
-                            estado = EstadoTransaccion.RECHAZADA;
+                            estado = EstadoTransaccion.ERROR;
+                            codigoFallback = "XML_VACIO";
+                            motivoRechazo = "GestoPago devolvió una respuesta vacía tras renovar token.";
                         }
+                    } catch (GestoPagoIntegrationException retryTokenEx) {
+                        estado = EstadoTransaccion.ERROR;
+                        codigoFallback = "TOKEN_ERR";
+                        motivoRechazo = truncar(retryTokenEx.getMessage(), 500);
+                        excepcionToken = retryTokenEx;
                     } catch (Exception retryEx) {
                         log.error("Error en reintento tras renovación de token: {}", retryEx.getMessage(), retryEx);
                         estado = EstadoTransaccion.ERROR;
+                        codigoFallback = "ERR_INT";
+                        motivoRechazo = truncar(
+                                "Error al reintentar la transacción con GestoPago" + sufijoDetalle(retryEx.getMessage()),
+                                500);
                     }
                 } else {
                     log.error("Error HTTP {} de GestoPago en sendTx: {}", ex.status(), ex.getMessage());
                     estado = EstadoTransaccion.ERROR;
+                    codigoFallback = truncar("HTTP_" + ex.status(), 10);
+                    motivoRechazo = truncar(
+                            "Error HTTP " + ex.status() + " al comunicarse con GestoPago" + sufijoDetalle(ex.getMessage()),
+                            500);
                 }
+            } catch (GestoPagoIntegrationException tokenEx) {
+                log.error("Error al obtener token de GestoPago para UPC={}: {}", payload.getUpc(), tokenEx.getMessage());
+                estado = EstadoTransaccion.ERROR;
+                codigoFallback = "TOKEN_ERR";
+                motivoRechazo = truncar(tokenEx.getMessage(), 500);
+                excepcionToken = tokenEx;
             } catch (Exception ex) {
                 log.error("Error inesperado consumiendo sendTx.do en GestoPago: {}", ex.getMessage(), ex);
                 estado = EstadoTransaccion.ERROR;
+                codigoFallback = "ERR_INT";
+                motivoRechazo = truncar(
+                        "Error al procesar la transacción con GestoPago" + sufijoDetalle(ex.getMessage()),
+                        500);
             }
         }
 
-        // 4. Débito de saldo en PostgreSQL si la transacción fue EXITOSA y se vinculó una cuenta
+        if (estado == EstadoTransaccion.EXITOSA) {
+            motivoRechazo = null;
+        } else if (motivoRechazo == null || motivoRechazo.isBlank()) {
+            motivoRechazo = "La transacción no pudo completarse (estado: " + estado.name() + ").";
+        }
+
         BigDecimal nuevoSaldoCuenta = null;
         String numeroCuentaVinculada = null;
 
@@ -391,9 +572,16 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             }
         }
 
-        // 5. Persistir la transacción en la base de datos PostgreSQL (Log evidence mandatorio por GestoPago)
+        if (excepcionToken != null) {
+            persistirFalloEjecucion(
+                    tipoOperacion, payload, xmlResponse, estado, codigoFallback, motivoRechazo,
+                    jsonPayload, rawXml, numeroCuentaVinculada, montoOriginal, nombreProducto);
+            throw excepcionToken;
+        }
+
         GestoPagoTransaccion entidad = guardarTransaccionEnBaseDeDatos(
-                tipoOperacion, payload, xmlResponse, estado, jsonPayload, rawXml, numeroCuentaVinculada, montoOriginal, nombreProducto);
+                tipoOperacion, payload, xmlResponse, estado, codigoFallback, motivoRechazo,
+                jsonPayload, rawXml, numeroCuentaVinculada, montoOriginal, nombreProducto);
 
         GestoPagoTransaccionResponse respuesta = construirRespuesta(entidad, xmlResponse, montoOriginal, nuevoSaldoCuenta);
         log.info("Transacción UPC={} procesada con estado={}, codigo={}",
@@ -529,11 +717,13 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         }
     }
 
-    private GestoPagoTransaccion guardarTransaccionEnBaseDeDatos(
+    private GestoPagoTransaccion construirEntidadTransaccion(
             TipoOperacionGestoPago tipoOperacion,
             GestoPagoSendTxPayload payload,
             GestoPagoSendTxXmlResponse xmlResponse,
             EstadoTransaccion estado,
+            String codigoFallback,
+            String motivoRechazo,
             String rawRequest,
             String rawXml,
             String numeroCuenta,
@@ -555,12 +745,13 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
         entidad.setEstado(estado.name());
         entidad.setRawRequestPayload(rawRequest);
         entidad.setRawResponseXml(rawXml);
+        entidad.setMotivoRechazo(truncar(motivoRechazo, 500));
 
         if (xmlResponse != null) {
             entidad.setIdTx(xmlResponse.getIdTx());
             entidad.setNumAutorizacion(xmlResponse.getNumAutorizacion());
-            entidad.setCodigoRespuesta(xmlResponse.obtenerCodigo());
-            entidad.setTextoRespuesta(xmlResponse.obtenerTextoMensaje());
+            entidad.setCodigoRespuesta(truncar(xmlResponse.obtenerCodigo(), 10));
+            entidad.setTextoRespuesta(truncar(xmlResponse.obtenerTextoMensaje(), 500));
             entidad.setSaldo(xmlResponse.getSaldo());
             entidad.setSaldoFormateado(xmlResponse.getSaldoF());
             entidad.setComision(xmlResponse.getComision());
@@ -568,9 +759,172 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
             entidad.setFechaTransaccion(xmlResponse.getFecha());
             entidad.setPin(xmlResponse.obtenerPin());
             entidad.setLegend(xmlResponse.obtenerLegend());
+        } else {
+            entidad.setCodigoRespuesta(truncar(codigoFallback, 10));
+            entidad.setTextoRespuesta(truncar(motivoRechazo, 500));
         }
 
+        return entidad;
+    }
+
+    private GestoPagoTransaccion guardarTransaccionEnBaseDeDatos(
+            TipoOperacionGestoPago tipoOperacion,
+            GestoPagoSendTxPayload payload,
+            GestoPagoSendTxXmlResponse xmlResponse,
+            EstadoTransaccion estado,
+            String codigoFallback,
+            String motivoRechazo,
+            String rawRequest,
+            String rawXml,
+            String numeroCuenta,
+            BigDecimal montoOriginal,
+            String nombreProducto) {
+
+        GestoPagoTransaccion entidad = construirEntidadTransaccion(
+                tipoOperacion, payload, xmlResponse, estado, codigoFallback, motivoRechazo,
+                rawRequest, rawXml, numeroCuenta, montoOriginal, nombreProducto);
         return transaccionRepository.save(entidad);
+    }
+
+    private void persistirFalloEjecucion(
+            TipoOperacionGestoPago tipoOperacion,
+            GestoPagoSendTxPayload payload,
+            GestoPagoSendTxXmlResponse xmlResponse,
+            EstadoTransaccion estado,
+            String codigoFallback,
+            String motivoRechazo,
+            String rawRequest,
+            String rawXml,
+            String numeroCuenta,
+            BigDecimal montoOriginal,
+            String nombreProducto) {
+        GestoPagoTransaccion entidad = construirEntidadTransaccion(
+                tipoOperacion, payload, xmlResponse, estado, codigoFallback, motivoRechazo,
+                rawRequest, rawXml, numeroCuenta, montoOriginal, nombreProducto);
+        persistirEntidadAuditoria(entidad);
+    }
+
+    private void registrarRechazoLocal(
+            TipoOperacionGestoPago tipoOperacion,
+            Integer idProducto,
+            Integer idServicio,
+            String nombreProducto,
+            String telefono,
+            String referencia,
+            BigDecimal montoPago,
+            String upcSolicitado,
+            String horaLocal,
+            String unidad,
+            String numeroCuenta,
+            RuntimeException ex) {
+        String codigoError = clasificarCodigoRechazoLocal(ex);
+        EstadoTransaccion estado = "DUP_UPC".equals(codigoError)
+                ? EstadoTransaccion.DUPLICADA
+                : ("TOKEN_ERR".equals(codigoError) ? EstadoTransaccion.ERROR : EstadoTransaccion.RECHAZADA);
+
+        String upcAuditoria = asegurarUpcUnicoRechazo(upcSolicitado);
+        String cuentaLimpia = (numeroCuenta != null && !numeroCuenta.isBlank())
+                ? truncar(numeroCuenta.trim(), 20)
+                : null;
+        String telefonoSeguro = (telefono != null && !telefono.isBlank())
+                ? truncar(telefono.trim(), 30)
+                : (tipoOperacion == TipoOperacionGestoPago.PAGO_SERVICIO ? TELEFONO_FIJO_SERVICIO : "0000000000");
+        String motivo = truncar(
+                ex.getMessage() != null && !ex.getMessage().isBlank()
+                        ? ex.getMessage().trim()
+                        : "Transacción rechazada durante la validación previa.",
+                500);
+
+        GestoPagoSendTxPayload payloadAudit = GestoPagoSendTxPayload.builder()
+                .idProducto(idProducto != null ? idProducto : 0)
+                .idServicio(idServicio != null ? idServicio : 0)
+                .telefono(telefonoSeguro)
+                .referencia(referencia != null && !referencia.isBlank() ? referencia.trim() : null)
+                .montoPago(montoPago)
+                .horaLocal(horaLocal)
+                .upc(upcAuditoria)
+                .unidad(unidad)
+                .build();
+
+        String rawRequest = null;
+        try {
+            rawRequest = objectMapper.writeValueAsString(payloadAudit);
+        } catch (Exception ignored) {
+        }
+
+        GestoPagoTransaccion entidad = construirEntidadTransaccion(
+                tipoOperacion, payloadAudit, null, estado, codigoError, motivo,
+                rawRequest, null, cuentaLimpia, montoPago != null ? montoPago : BigDecimal.ZERO, nombreProducto);
+        persistirEntidadAuditoria(entidad);
+    }
+
+    private void persistirEntidadAuditoria(GestoPagoTransaccion entidad) {
+        try {
+            if (registroService != null) {
+                registroService.guardarEnTransaccionIndependiente(entidad);
+            } else {
+                transaccionRepository.save(entidad);
+            }
+        } catch (Exception ex) {
+            log.warn("No fue posible guardar auditoría de rechazo local para UPC={}: {}",
+                    entidad.getUpc(), ex.getMessage());
+        }
+    }
+
+    private String asegurarUpcUnicoRechazo(String upcBase) {
+        String limpio = upcBase != null ? upcBase.trim() : "";
+        if (!limpio.isEmpty() && !transaccionRepository.existsByUpc(limpio)) {
+            return truncar(limpio, 64);
+        }
+        String generado = "RJ" + Long.toHexString(System.currentTimeMillis()).toUpperCase()
+                + UUID.randomUUID().toString().replace("-", "").toUpperCase();
+        return generado.substring(0, 15);
+    }
+
+    private String clasificarCodigoRechazoLocal(RuntimeException ex) {
+        String msg = ex.getMessage() != null ? ex.getMessage() : "";
+        if (msg.contains("no existe")) return "CTA_NO_EX";
+        if (msg.contains("no se encuentra activa")) return "CTA_INACT";
+        if (msg.contains("está inactivo")) return "CLI_INACT";
+        if (msg.contains("Saldo insuficiente")) return "SALDO_INS";
+        if (msg.contains("es obligatorio")) return "2FA_REQ";
+        if (msg.contains("2FA")) return "2FA_INV";
+        if (ex instanceof GestoPagoIntegrationException && msg.contains("duplicada")) return "DUP_UPC";
+        if (ex instanceof GestoPagoIntegrationException && msg.contains("token")) return "TOKEN_ERR";
+        return "DATOS_INV";
+    }
+
+    private String construirMotivoRechazoXml(GestoPagoSendTxXmlResponse xmlResponse) {
+        String codigo = xmlResponse.obtenerCodigo();
+        String texto = xmlResponse.obtenerTextoMensaje();
+        boolean tieneCodigo = codigo != null && !codigo.isBlank();
+        boolean tieneTexto = texto != null && !texto.isBlank();
+
+        String detalle;
+        if (tieneCodigo && tieneTexto) {
+            detalle = "Rechazo de GestoPago (código " + codigo + "): " + texto.trim();
+        } else if (tieneTexto) {
+            detalle = texto.trim();
+        } else if (tieneCodigo) {
+            detalle = "Rechazo de GestoPago (código " + codigo + ").";
+        } else {
+            detalle = "Transacción rechazada por GestoPago sin detalle.";
+        }
+        return truncar(detalle, 500);
+    }
+
+    private String sufijoDetalle(String detail) {
+        if (detail == null || detail.isBlank()) {
+            return ".";
+        }
+        return ": " + detail.trim();
+    }
+
+    private String truncar(String valor, int maxLen) {
+        if (valor == null) {
+            return null;
+        }
+        return valor.length() <= maxLen ? valor : valor.substring(0, maxLen);
     }
 
     private GestoPagoTransaccionResponse construirRespuesta(
@@ -589,6 +943,9 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
 
         boolean exitoso = EstadoTransaccion.EXITOSA.name().equals(entidad.getEstado());
         String nombreProducto = resolverNombreProducto(entidad);
+        String motivo = exitoso ? null : (entidad.getMotivoRechazo() != null
+                ? entidad.getMotivoRechazo()
+                : entidad.getTextoRespuesta());
 
         return GestoPagoTransaccionResponse.builder()
                 .upc(entidad.getUpc())
@@ -600,6 +957,7 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
                 .estado(EstadoTransaccion.valueOf(entidad.getEstado()))
                 .codigo(entidad.getCodigoRespuesta())
                 .mensaje(entidad.getTextoRespuesta() != null ? entidad.getTextoRespuesta() : "Transacción registrada")
+                .motivoRechazo(motivo)
                 .idTx(entidad.getIdTx())
                 .numAutorizacion(entidad.getNumAutorizacion())
                 .monto(montoFinal)
@@ -619,16 +977,22 @@ public class GestoPagoTransactionServiceImpl implements GestoPagoTransactionServ
     }
 
     private GestoPagoTransaccionResponse mapearEntidadARespuesta(GestoPagoTransaccion entidad) {
+        boolean exitoso = EstadoTransaccion.EXITOSA.name().equals(entidad.getEstado());
+        String motivo = exitoso ? null : (entidad.getMotivoRechazo() != null
+                ? entidad.getMotivoRechazo()
+                : entidad.getTextoRespuesta());
+
         return GestoPagoTransaccionResponse.builder()
                 .upc(entidad.getUpc())
                 .tipoOperacion(TipoOperacionGestoPago.valueOf(entidad.getTipoOperacion()))
                 .idProducto(entidad.getIdProducto())
                 .idServicio(entidad.getIdServicio())
                 .nombreProducto(resolverNombreProducto(entidad))
-                .exitoso(EstadoTransaccion.EXITOSA.name().equals(entidad.getEstado()))
+                .exitoso(exitoso)
                 .estado(EstadoTransaccion.valueOf(entidad.getEstado()))
                 .codigo(entidad.getCodigoRespuesta())
                 .mensaje(entidad.getTextoRespuesta())
+                .motivoRechazo(motivo)
                 .idTx(entidad.getIdTx())
                 .numAutorizacion(entidad.getNumAutorizacion())
                 .monto(entidad.getMontoPago())

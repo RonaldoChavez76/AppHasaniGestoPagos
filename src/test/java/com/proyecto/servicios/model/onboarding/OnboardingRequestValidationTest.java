@@ -40,7 +40,7 @@ class OnboardingRequestValidationTest {
                 new BigDecimal("25000.00"),
                 new DomicilioRequest("Calle Uno", "123", null, "Centro", "Municipio",
                         "Estado", "01234", "México"),
-                "ClaveSegura1!"
+                "ClaveSeg1!"
         );
 
         Set<String> camposInvalidos = validator.validate(request).stream()
@@ -59,7 +59,7 @@ class OnboardingRequestValidationTest {
                 new BigDecimal("25000.00"),
                 new DomicilioRequest("Calle Uno", "123", null, "Centro", "Municipio",
                         "Estado", "01234", "México"),
-                "ClaveSegura1!"
+                "ClaveSeg1!"
         );
 
         assertTrue(validator.validate(request).isEmpty());
@@ -75,7 +75,7 @@ class OnboardingRequestValidationTest {
                 new BigDecimal("25000.00"),
                 new DomicilioRequest(" Calle Uno ", " 123 ", "   ", " Centro ", " Municipio ",
                         " Estado ", " 01234 ", " México "),
-                "ClaveSegura1!"
+                "ClaveSeg1!"
         );
 
         assertEquals("Ronaldo", request.primerNombre());
@@ -116,7 +116,7 @@ class OnboardingRequestValidationTest {
                 new BigDecimal("25000.00"),
                 new DomicilioRequest("Calle Uno", "123", null, "Centro", "Municipio",
                         "Estado", "01234", "México"),
-                "ClaveSegura1!"
+                "ClaveSeg1!"
         );
 
         assertTrue(validator.validate(request).stream()
@@ -204,7 +204,7 @@ class OnboardingRequestValidationTest {
     }
 
     @Test
-    void registroAceptaNombresCortosDeDosLetrasYAbreviaturaDeEstado() {
+    void registroRechazaNombresApellidosMenoresATresLetrasYPasswordMayorADoce() {
         RegistroClienteRequest request = new RegistroClienteRequest(
                 "Li", "Yu", "Fe", "Ed",
                 LocalDate.now().minusYears(25),
@@ -215,17 +215,42 @@ class OnboardingRequestValidationTest {
                 "ClaveSegura1!"
         );
 
-        assertTrue(validator.validate(request).isEmpty());
-    }
-
-    @Test
-    void cambiarPasswordRechazaEspaciosEnNuevaContrasena() {
-        CambiarPasswordRequest request = new CambiarPasswordRequest("Actual1!", "Nueva 2026!");
-
         Set<String> camposInvalidos = validator.validate(request).stream()
                 .map(violation -> violation.getPropertyPath().toString())
                 .collect(Collectors.toSet());
 
-        assertEquals(Set.of("passwordNueva"), camposInvalidos);
+        assertEquals(Set.of(
+                "primerNombre", "segundoNombre", "apellidoPaterno", "apellidoMaterno", "password"
+        ), camposInvalidos);
+    }
+
+    @Test
+    void registroAceptaNombresDeTresLetrasEstadoCortoYPasswordDeDoceCaracteres() {
+        RegistroClienteRequest request = new RegistroClienteRequest(
+                "Ana", "Luz", "Roa", "Gil",
+                LocalDate.now().minusYears(25),
+                "GODE561231HDFRRN09", "GODE561231GR8", "M", "Mexicana", "Soltero",
+                "ana.gil@example.com", "5512345678", null, "Analista", "HP",
+                new BigDecimal("18000.00"),
+                new DomicilioRequest("Av. Reforma", "S/N", "2-B", "Centro", "Monterrey", "NL", "64000", "México"),
+                "ClaveSegur1!"
+        );
+
+        assertTrue(validator.validate(request).isEmpty());
+    }
+
+    @Test
+    void cambiarPasswordRechazaEspaciosYLongitudMayorADoceEnNuevaContrasena() {
+        CambiarPasswordRequest conEspacio = new CambiarPasswordRequest("Actual1!", "Nueva 2026!");
+        Set<String> invalidosEspacio = validator.validate(conEspacio).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet());
+        assertEquals(Set.of("passwordNueva"), invalidosEspacio);
+
+        CambiarPasswordRequest muyLarga = new CambiarPasswordRequest("ActualContrasena99!", "ClaveSegura1!");
+        Set<String> invalidosLarga = validator.validate(muyLarga).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet());
+        assertEquals(Set.of("passwordNueva"), invalidosLarga);
     }
 }

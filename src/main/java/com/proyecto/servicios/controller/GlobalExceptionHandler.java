@@ -184,7 +184,8 @@ public class GlobalExceptionHandler {
             case "telefonoMovil", "telefonoAlternativo" ->
                     "debe contener exactamente 10 dígitos.";
             case "codigoPostal" -> "debe contener exactamente 5 dígitos.";
-            case "password" -> "debe tener al menos 8 caracteres, mayúscula, minúscula, número y símbolo.";
+            case "password", "passwordNueva" ->
+                    "debe tener entre 8 y 12 caracteres sin espacios, mayúscula, minúscula, número y símbolo.";
             default -> "tiene un formato inválido.";
         };
     }

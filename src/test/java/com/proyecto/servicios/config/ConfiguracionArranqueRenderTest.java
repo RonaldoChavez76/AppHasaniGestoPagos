@@ -29,6 +29,9 @@ class ConfiguracionArranqueRenderTest {
 
         assertEquals("${SPRING_CLOUD_CONFIG_ENABLED:false}", props.getProperty("spring.cloud.config.enabled"));
         assertEquals("false", props.getProperty("spring.data.redis.repositories.enabled"));
+        assertEquals("false", props.getProperty("spring.jpa.open-in-view"));
+        assertEquals("false", props.getProperty("spring.jmx.enabled"));
+        assertEquals("${GESTOPAGO_TOKEN_INITIAL_DELAY_MS:15000}", props.getProperty("gestopago.auth.initial-delay-ms"));
         assertEquals("${HEALTH_SHOW_COMPONENTS:always}", props.getProperty("management.endpoint.health.show-components"));
         assertEquals("false", props.getProperty("management.health.config.enabled"));
     }
@@ -84,6 +87,26 @@ class ConfiguracionArranqueRenderTest {
                 closeable.close();
             }
         }
+    }
+
+    @Test
+    void configuraPropiedadesHibernateYDriverPostgresParaEvitarBloqueoMetadataEnRender() {
+        MockEnvironment env = new MockEnvironment()
+                .withProperty("spring.datasource.url", "jdbc:postgresql://db.ejemplo.neon.tech/neondb?sslmode=require")
+                .withProperty("spring.datasource.username", "neondb_owner")
+                .withProperty("spring.datasource.password", "secreto");
+
+        ConfigDB configDB = new ConfigDB();
+        ReflectionTestUtils.setField(configDB, "env", env);
+
+        var entityManagerFactoryBean = configDB.sfEntityManagerFactory(new org.springframework.jdbc.datasource.DriverManagerDataSource());
+        assertNotNull(entityManagerFactoryBean);
+        Map<String, Object> jpaProps = entityManagerFactoryBean.getJpaPropertyMap();
+        assertEquals(false, jpaProps.get("hibernate.boot.allow_jdbc_metadata_access"));
+        assertEquals("PostgreSQL", jpaProps.get("jakarta.persistence.database-product-name"));
+        assertEquals("16", jpaProps.get("jakarta.persistence.database-major-version"));
+        assertEquals(true, jpaProps.get("hibernate.jdbc.lob.non_contextual_creation"));
+        assertEquals(null, jpaProps.get("hibernate.dialect"));
     }
 
     private RedisProperties bindRedisProperties(Map<String, Object> envVars) throws Exception {

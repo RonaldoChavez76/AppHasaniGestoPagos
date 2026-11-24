@@ -43,4 +43,14 @@ public interface GestoPagoTransactionService {
                 .filter(GestoPagoTransaccionResponse::isExitoso)
                 .toList();
     }
+
+    default List<GestoPagoTransaccionResponse> listarHistorialCompletoPorUsuario(Long clienteId, String numeroCuenta) {
+        return listarUltimasTransacciones();
+    }
+
+    default List<GestoPagoTransaccionResponse> listarComprasRechazadasPorUsuario(Long clienteId, String numeroCuenta) {
+        return listarUltimasTransacciones().stream()
+                .filter(tx -> !tx.isExitoso())
+                .toList();
+    }
 }

@@ -64,6 +64,9 @@ public class GestoPagoTransaccion implements Serializable {
     @Column(name = "texto_respuesta", length = 500)
     private String textoRespuesta;
 
+    @Column(name = "motivo_rechazo", length = 500)
+    private String motivoRechazo;
+
     @Column(name = "saldo", length = 50)
     private String saldo;
 

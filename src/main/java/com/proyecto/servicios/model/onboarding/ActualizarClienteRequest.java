@@ -15,13 +15,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record ActualizarClienteRequest(
-        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
+        @NotBlank @Size(min = 3, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String primerNombre,
-        @Pattern(regexp = "^$|^(?=.{2,50}$)[\\p{L}]+(?: [\\p{L}]+)*$")
+        @Pattern(regexp = "^$|^(?=.{3,50}$)[\\p{L}]+(?: [\\p{L}]+)*$")
         String segundoNombre,
-        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
+        @NotBlank @Size(min = 3, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String apellidoPaterno,
-        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
+        @NotBlank @Size(min = 3, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String apellidoMaterno,
         @NotNull @Past LocalDate fechaNacimiento,
         @NotBlank @Size(min = 1, max = 20) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$") String sexo,

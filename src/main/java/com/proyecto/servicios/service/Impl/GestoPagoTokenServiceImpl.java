@@ -42,7 +42,10 @@ public class GestoPagoTokenServiceImpl implements GestoPagoTokenService {
     }
 
     @Override
-    @Scheduled(fixedRateString = "${gestopago.auth.refresh-rate-ms:3600000}", initialDelay = 0)
+    @Scheduled(
+            fixedRateString = "${gestopago.auth.refresh-rate-ms:3600000}",
+            initialDelayString = "${gestopago.auth.initial-delay-ms:15000}"
+    )
     public void renovarToken() {
         log.info("Renovando token GestoPago para distribuidor={}", idDistribuidor);
         try {
