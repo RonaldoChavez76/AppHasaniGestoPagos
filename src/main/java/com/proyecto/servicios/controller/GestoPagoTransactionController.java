@@ -98,6 +98,44 @@ public class GestoPagoTransactionController {
                 HttpStatus.OK.value(), "Historial de compras exitosas consultado correctamente", exitosas));
     }
 
+    @GetMapping(value = "/historial/completo", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+            summary = "Consultar historial completo de compras del usuario",
+            description = "Retorna operaciones exitosas y rechazadas o fallidas asociadas al usuario o cuenta, incluyendo el motivo específico de rechazo."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<ApiResponse<List<GestoPagoTransaccionResponse>>> listarHistorialCompleto(
+            @RequestParam(required = false) Long clienteId,
+            @RequestParam(required = false) String numeroCuenta,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+        JwtTokenService.AuthenticatedUser user = validarSesionSiPresente(authorization);
+        Long clienteIdEfectivo = clienteId != null ? clienteId : (user != null ? user.clienteId() : null);
+
+        List<GestoPagoTransaccionResponse> completo =
+                transactionService.listarHistorialCompletoPorUsuario(clienteIdEfectivo, numeroCuenta);
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(), "Historial completo de compras consultado correctamente", completo));
+    }
+
+    @GetMapping(value = "/historial/rechazadas", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+            summary = "Consultar historial de compras rechazadas o fallidas del usuario",
+            description = "Retorna las operaciones no exitosas registradas con la razón específica del fallo o rechazo."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<ApiResponse<List<GestoPagoTransaccionResponse>>> listarComprasRechazadas(
+            @RequestParam(required = false) Long clienteId,
+            @RequestParam(required = false) String numeroCuenta,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+        JwtTokenService.AuthenticatedUser user = validarSesionSiPresente(authorization);
+        Long clienteIdEfectivo = clienteId != null ? clienteId : (user != null ? user.clienteId() : null);
+
+        List<GestoPagoTransaccionResponse> rechazadas =
+                transactionService.listarComprasRechazadasPorUsuario(clienteIdEfectivo, numeroCuenta);
+        return ResponseEntity.ok(ApiResponse.success(
+                HttpStatus.OK.value(), "Historial de compras rechazadas consultado correctamente", rechazadas));
+    }
+
     @GetMapping(value = "/{upc}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Consultar estado y detalle de transacción por UPC", description = "Obtiene los detalles y comprobante de una transacción registrada en base de datos mediante su código UPC")
     public ResponseEntity<ApiResponse<GestoPagoTransaccionResponse>> consultarPorUpc(
@@ -113,13 +151,22 @@ public class GestoPagoTransactionController {
     }
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(summary = "Historial de transacciones", description = "Lista las transacciones registradas localmente en PostgreSQL, permitiendo filtrar opcionalmente solo exitosas por cuenta o cliente")
+    @Operation(summary = "Historial de transacciones", description = "Lista las transacciones registradas localmente en PostgreSQL, permitiendo filtrar exitosas o incluir rechazadas por cuenta o cliente")
     public ResponseEntity<ApiResponse<List<GestoPagoTransaccionResponse>>> listarHistorial(
             @RequestParam(required = false) Boolean soloExitosas,
+            @RequestParam(required = false) Boolean incluirRechazadas,
             @RequestParam(required = false) Long clienteId,
             @RequestParam(required = false) String numeroCuenta,
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
         JwtTokenService.AuthenticatedUser user = validarSesionSiPresente(authorization);
+
+        if (Boolean.TRUE.equals(incluirRechazadas) || Boolean.FALSE.equals(soloExitosas)) {
+            Long clienteIdEfectivo = clienteId != null ? clienteId : (user != null ? user.clienteId() : null);
+            List<GestoPagoTransaccionResponse> completo =
+                    transactionService.listarHistorialCompletoPorUsuario(clienteIdEfectivo, numeroCuenta);
+            return ResponseEntity.ok(ApiResponse.success(
+                    HttpStatus.OK.value(), "Historial completo de compras consultado correctamente", completo));
+        }
 
         if (Boolean.TRUE.equals(soloExitosas) || clienteId != null || (numeroCuenta != null && !numeroCuenta.isBlank())) {
             Long clienteIdEfectivo = clienteId != null ? clienteId : (user != null ? user.clienteId() : null);

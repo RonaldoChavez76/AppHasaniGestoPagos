@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 public class UsuarioServiceImpl implements UsuarioService {
 
     private static final int LONGITUD_MAXIMA_BCRYPT_BYTES = 72;
+    private static final int LONGITUD_MAXIMA_PASSWORD = 12;
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
@@ -47,8 +48,8 @@ public class UsuarioServiceImpl implements UsuarioService {
         if (!passwordEncoder.matches(request.passwordActual(), usuario.getPasswordHash())) {
             throw new CredencialesInvalidasException();
         }
-        if (request.passwordNueva().getBytes(StandardCharsets.UTF_8).length > LONGITUD_MAXIMA_BCRYPT_BYTES) {
-            throw new IllegalArgumentException("La contraseña excede el máximo admitido por BCrypt (72 bytes UTF-8).");
+        if (request.passwordNueva().length() > LONGITUD_MAXIMA_PASSWORD) {
+            throw new IllegalArgumentException("La contraseña debe tener máximo 12 caracteres.");
         }
         if (passwordEncoder.matches(request.passwordNueva(), usuario.getPasswordHash())) {
             throw new IllegalArgumentException("La nueva contraseña debe ser diferente de la actual.");

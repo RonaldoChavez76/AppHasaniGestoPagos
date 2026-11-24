@@ -31,4 +31,16 @@ public interface GestoPagoTransaccionRepository extends JpaRepository<GestoPagoT
 
     List<GestoPagoTransaccion> findByNumeroCuentaInAndEstadoOrderByCreatedAtDesc(
             Collection<String> numerosCuenta, String estado);
+
+    List<GestoPagoTransaccion> findByNumeroCuentaOrderByCreatedAtDesc(String numeroCuenta);
+
+    List<GestoPagoTransaccion> findByNumeroCuentaInOrderByCreatedAtDesc(Collection<String> numerosCuenta);
+
+    List<GestoPagoTransaccion> findByNumeroCuentaAndEstadoNotOrderByCreatedAtDesc(
+            String numeroCuenta, String estadoExcluido);
+
+    List<GestoPagoTransaccion> findByNumeroCuentaInAndEstadoNotOrderByCreatedAtDesc(
+            Collection<String> numerosCuenta, String estadoExcluido);
+
+    List<GestoPagoTransaccion> findTop50ByEstadoNotOrderByCreatedAtDesc(String estadoExcluido);
 }

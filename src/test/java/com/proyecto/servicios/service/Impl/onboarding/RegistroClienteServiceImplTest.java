@@ -94,8 +94,8 @@ class RegistroClienteServiceImplTest {
         verify(usuarioRepository).save(usuarioCaptor.capture());
         assertEquals("persona@example.com", usuarioCaptor.getValue().getCliente().getCorreo());
         assertEquals(com.proyecto.servicios.entity.onboarding.RolUsuario.CLIENTE, usuarioCaptor.getValue().getRol());
-        assertTrue(passwordEncoder.matches("ClaveSegura1!", usuarioCaptor.getValue().getPasswordHash()));
-        assertNotEquals("ClaveSegura1!", usuarioCaptor.getValue().getPasswordHash());
+        assertTrue(passwordEncoder.matches("ClaveSeg1!", usuarioCaptor.getValue().getPasswordHash()));
+        assertNotEquals("ClaveSeg1!", usuarioCaptor.getValue().getPasswordHash());
 
         var cuentaCaptor = org.mockito.ArgumentCaptor.forClass(Cuenta.class);
         verify(cuentaRepository).save(cuentaCaptor.capture());
@@ -123,6 +123,39 @@ class RegistroClienteServiceImplTest {
         verifyNoInteractions(domicilioRepository, usuarioRepository, cuentaRepository);
     }
 
+    @Test
+    void rechazaPasswordMayorADoceCaracteresAntesDeGuardar() {
+        RegistroClienteRequest requestLarga = new RegistroClienteRequest(
+                "Nombre",
+                null,
+                "Apellido",
+                "ApellidoMaterno",
+                LocalDate.now().minusYears(30),
+                "GODE561231HDFRRN09",
+                "GODE561231GR8",
+                "M",
+                "Mexicana",
+                "Soltero",
+                "Persona@Example.COM",
+                "5512345678",
+                null,
+                "Ingeniera",
+                "Empresa",
+                new BigDecimal("25000.00"),
+                new DomicilioRequest(
+                        "Calle Uno", "123", null, "Centro", "Municipio", "Estado", "01234", "México"),
+                "ClaveSegura1!"
+        );
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.registrar(requestLarga)
+        );
+
+        assertTrue(ex.getMessage().contains("12"));
+        verifyNoInteractions(clienteRepository, domicilioRepository, usuarioRepository, cuentaRepository);
+    }
+
     private RegistroClienteRequest request(LocalDate fechaNacimiento) {
         return new RegistroClienteRequest(
                 "Nombre",
@@ -143,7 +176,7 @@ class RegistroClienteServiceImplTest {
                 new BigDecimal("25000.00"),
                 new DomicilioRequest(
                         "Calle Uno", "123", null, "Centro", "Municipio", "Estado", "01234", "México"),
-                "ClaveSegura1!"
+                "ClaveSeg1!"
         );
     }
 }

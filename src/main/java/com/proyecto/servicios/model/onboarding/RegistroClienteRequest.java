@@ -15,13 +15,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record RegistroClienteRequest(
-        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
+        @NotBlank @Size(min = 3, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String primerNombre,
-        @Pattern(regexp = "^$|^(?=.{2,50}$)[\\p{L}]+(?: [\\p{L}]+)*$")
+        @Pattern(regexp = "^$|^(?=.{3,50}$)[\\p{L}]+(?: [\\p{L}]+)*$")
         String segundoNombre,
-        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
+        @NotBlank @Size(min = 3, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String apellidoPaterno,
-        @NotBlank @Size(min = 2, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
+        @NotBlank @Size(min = 3, max = 50) @Pattern(regexp = "^[\\p{L}]+(?: [\\p{L}]+)*$")
         String apellidoMaterno,
         @NotNull @Past
         LocalDate fechaNacimiento,
@@ -49,8 +49,8 @@ public record RegistroClienteRequest(
         BigDecimal ingresoMensual,
         @NotNull @Valid
         DomicilioRequest domicilio,
-        @NotBlank @Size(min = 8, max = 72)
-        @Pattern(regexp = "^(?!.*\\s)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,72}$")
+        @NotBlank @Size(min = 8, max = 12)
+        @Pattern(regexp = "^(?!.*\\s)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,12}$")
         String password
 ) {
     public RegistroClienteRequest {

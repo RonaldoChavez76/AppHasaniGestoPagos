@@ -42,7 +42,8 @@ public class ConfigDB {
     public DataSource sfDatasource(){
         HikariConfig config=new HikariConfig();
         try{
-            config.setJdbcUrl(env.getProperty("spring.datasource.url"));
+            String jdbcUrl = env.getProperty("spring.datasource.url");
+            config.setJdbcUrl(jdbcUrl);
             config.setPassword(env.getProperty("spring.datasource.password"));
             config.setUsername(env.getProperty("spring.datasource.username"));
             config.setMaximumPoolSize(env.getProperty("app.db.pool.max-size", Integer.class, 5));
@@ -53,6 +54,12 @@ public class ConfigDB {
             config.setMinimumIdle(env.getProperty("app.db.pool.min-idle", Integer.class, 1));
             config.setConnectionTestQuery("SELECT 1");
             config.setPoolName("sfDatasource");
+            if (jdbcUrl != null && jdbcUrl.startsWith("jdbc:postgresql:")) {
+                config.addDataSourceProperty("connectTimeout", env.getProperty("app.db.pg.connect-timeout-s", "10"));
+                config.addDataSourceProperty("socketTimeout", env.getProperty("app.db.pg.socket-timeout-s", "30"));
+                config.addDataSourceProperty("loginTimeout", env.getProperty("app.db.pg.login-timeout-s", "10"));
+                config.addDataSourceProperty("tcpKeepAlive", "true");
+            }
 
         }catch (Exception e){
             log.error("Ha ocurrido un error en la conexión a la base de datos, a causa de:", e);
@@ -75,11 +82,19 @@ public class ConfigDB {
           em.setPersistenceUnitName("sfDatasource");
             HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
             em.setJpaVendorAdapter(vendorAdapter);
-          Map<String, Object> properties=new HashMap<>();
-          properties.put("hibernate.hbm2ddl.auto", "none");
+            String jdbcUrl = env.getProperty("spring.datasource.url", "");
+            Map<String, Object> properties = new HashMap<>();
+            properties.put("hibernate.hbm2ddl.auto", "none");
             properties.put("hibernate.show-sql", false);
-            properties.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
             properties.put("jakarta.persistence.query.timeout", 600000);
+            if (jdbcUrl.startsWith("jdbc:postgresql:")) {
+                properties.put("hibernate.boot.allow_jdbc_metadata_access", false);
+                properties.put("jakarta.persistence.database-product-name", "PostgreSQL");
+                properties.put("jakarta.persistence.database-major-version", "16");
+                properties.put("hibernate.jdbc.lob.non_contextual_creation", true);
+            } else {
+                properties.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+            }
             em.setJpaPropertyMap(properties);
 
 
